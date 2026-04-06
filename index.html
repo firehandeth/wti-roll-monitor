@@ -632,21 +632,27 @@
   </div>
 </div>
 
-<!-- Summary + Alerts -->
+<!-- PnL Summary + Alerts -->
 <div class="grid grid-2">
-  <!-- Portfolio Summary -->
+  <!-- Position PnL -->
   <div class="card">
-    <div class="card-label" style="margin-bottom:10px;">Portfolio Summary</div>
+    <div class="card-label" style="margin-bottom:10px;">Position PnL Summary</div>
     <table class="pnl-table">
-      <tr><th>Item</th><th>Value</th></tr>
-      <tr><td>Total Capital</td><td id="sumCapital">--</td></tr>
-      <tr><td>Total Position</td><td id="sumPosition">--</td></tr>
-      <tr><td>Notional Value</td><td id="sumNotional">--</td></tr>
-      <tr><td>Overall Leverage</td><td id="sumLeverage">--</td></tr>
-      <tr><td>Spread S₀</td><td id="sumSpread">--</td></tr>
-      <tr><td>HL UPnL (live)</td><td id="sumHlPnl">--</td></tr>
-      <tr class="highlight"><td>Expected Net PnL</td><td id="sumPnl" class="positive">--</td></tr>
-      <tr class="highlight"><td>Expected ROI</td><td id="sumRoi" class="positive">--</td></tr>
+      <tr><th>各腿盈亏</th><th>金额</th></tr>
+      <tr><td>HL UPnL (API)</td><td id="sumHlUpnl">--</td></tr>
+      <tr><td>HL 已付 FR (API)</td><td id="sumHlFr">--</td></tr>
+      <tr><td>Hood UPnL (Yahoo CLM)</td><td id="sumHoodUpnl">--</td></tr>
+      <tr><td>IBKR UPnL (Yahoo CLM)</td><td id="sumIbkrUpnl">--</td></tr>
+      <tr class="highlight"><td>当前收益 (立即平仓)</td><td id="sumCurrentPnl">--</td></tr>
+    </table>
+    <table class="pnl-table" style="margin-top:12px;">
+      <tr><th>Expected 收益</th><th>金额</th></tr>
+      <tr><td>HL↔Hood 开仓价差</td><td id="sumHoodSpread">--</td></tr>
+      <tr><td>HL↔IBKR 开仓价差</td><td id="sumIbkrSpread">--</td></tr>
+      <tr><td>已付 FR</td><td id="sumPaidFr">--</td></tr>
+      <tr><td>剩余 FR (按当前小时)</td><td id="sumProjFr">--</td></tr>
+      <tr class="highlight"><td>Expected 总收益</td><td id="sumExpectedPnl">--</td></tr>
+      <tr class="highlight"><td>Expected ROI</td><td id="sumExpectedRoi">--</td></tr>
     </table>
   </div>
   <!-- Alerts -->
@@ -1138,41 +1144,77 @@ function render(market, hlPos) {
   ibkrLiqEl.className = "value " + (Math.abs(ibkrLiqDist) > 20 ? "positive" : Math.abs(ibkrLiqDist) > 15 ? "warning" : "negative");
   document.getElementById("ibkrStop").textContent = fmt$(CFG.ibkrStop);
 
-  // Summary
-  const cmeBbl = totalBbl;
-  const summaryBbl = hasHlPos ? hlSize : cmeBbl;
-  const hlBalForSummary = hasHlPos ? hlBal : CFG.hlBal;
-  const totalCap = hlBalForSummary + CFG.hoodBal + CFG.ibkrBal + CFG.reserve;
-  const hlNotional = summaryBbl * (hlEntry || mark);
-  const cmeNotional = cmeBbl * CFG.hoodEntry;
-  const notional = hlNotional + cmeNotional;
-  const leverage = totalCap > 0 ? notional / totalCap : 0;
+  // ========== PnL Summary ==========
+  // --- Current PnL (立即平仓) ---
+  const sumHlUpnlEl = document.getElementById("sumHlUpnl");
+  sumHlUpnlEl.textContent = hasHlPos ? fmtPnl(hlPnl) : "--";
+  sumHlUpnlEl.className = hasHlPos ? pnlClass(hlPnl) : "";
 
-  // Use calculator's net PnL for summary
-  const basis = mark - oracle;
+  const sumHlFrEl = document.getElementById("sumHlFr");
+  sumHlFrEl.textContent = hasHlPos ? fmtPnl(hlCumFr) : "--";
+  sumHlFrEl.className = hasHlPos ? pnlClass(hlCumFr) : "";
+
+  const sumHoodUpnlEl = document.getElementById("sumHoodUpnl");
+  if (CFG.hoodEntry > 0 && CFG.clmPrice > 0) {
+    sumHoodUpnlEl.textContent = fmtPnl(hoodUpnl);
+    sumHoodUpnlEl.className = pnlClass(hoodUpnl);
+  } else {
+    sumHoodUpnlEl.textContent = "--";
+    sumHoodUpnlEl.className = "";
+  }
+
+  const sumIbkrUpnlEl = document.getElementById("sumIbkrUpnl");
+  if (CFG.ibkrEntry > 0 && CFG.clmPrice > 0) {
+    sumIbkrUpnlEl.textContent = fmtPnl(ibkrUpnl);
+    sumIbkrUpnlEl.className = pnlClass(ibkrUpnl);
+  } else {
+    sumIbkrUpnlEl.textContent = "--";
+    sumIbkrUpnlEl.className = "";
+  }
+
+  const currentPnl = (hasHlPos ? hlPnl : 0) + (hasHlPos ? hlCumFr : 0) + hoodUpnl + ibkrUpnl;
+  const sumCurrentEl = document.getElementById("sumCurrentPnl");
+  sumCurrentEl.textContent = fmtPnl(currentPnl);
+  sumCurrentEl.className = pnlClass(currentPnl);
+
+  // --- Expected PnL ---
+  const hlHoodSpreadPnl = (hlEntry > 0 && CFG.hoodEntry > 0) ? (hlEntry - CFG.hoodEntry) * hoodBbl : 0;
+  const hlIbkrSpreadPnl = (hlEntry > 0 && CFG.ibkrEntry > 0) ? (hlEntry - CFG.ibkrEntry) * ibkrBbl : 0;
+
+  const sumHoodSpreadEl = document.getElementById("sumHoodSpread");
+  if (hlEntry > 0 && CFG.hoodEntry > 0) {
+    sumHoodSpreadEl.textContent = fmtSign$(hlEntry - CFG.hoodEntry) + "/bbl × " + hoodBbl + " = " + fmtPnl(hlHoodSpreadPnl);
+    sumHoodSpreadEl.className = pnlClass(hlHoodSpreadPnl);
+  } else { sumHoodSpreadEl.textContent = "--"; }
+
+  const sumIbkrSpreadEl = document.getElementById("sumIbkrSpread");
+  if (hlEntry > 0 && CFG.ibkrEntry > 0) {
+    sumIbkrSpreadEl.textContent = fmtSign$(hlEntry - CFG.ibkrEntry) + "/bbl × " + ibkrBbl + " = " + fmtPnl(hlIbkrSpreadPnl);
+    sumIbkrSpreadEl.className = pnlClass(hlIbkrSpreadPnl);
+  } else { sumIbkrSpreadEl.textContent = "--"; }
+
+  const frPaid = hasHlPos ? hlCumFr : 0;
+  const sumPaidFrEl = document.getElementById("sumPaidFr");
+  sumPaidFrEl.textContent = hasHlPos ? fmtPnl(frPaid) : "--";
+  sumPaidFrEl.className = hasHlPos ? pnlClass(frPaid) : "";
+
   const frRemaining = getRemainingFrHours();
-  const frTotalDollar = market.funding * oracle * frRemaining.hours;
-  const netPnlBbl = spread + basis + frTotalDollar;
-  const expectedPnl = netPnlBbl * summaryBbl;
+  const hlTotalBbl = hasHlPos ? hlSize : (hoodBbl + ibkrBbl);
+  const frProjected = market.funding * oracle * frRemaining.hours * hlTotalBbl;
+  const sumProjFrEl = document.getElementById("sumProjFr");
+  sumProjFrEl.textContent = fmtPnl(frProjected) + " (" + frRemaining.hours + "h)";
+  sumProjFrEl.className = pnlClass(frProjected);
 
-  document.getElementById("sumCapital").textContent = fmt$(totalCap) + " (incl " + fmt$(CFG.reserve) + " reserve)";
-  document.getElementById("sumPosition").textContent = summaryBbl.toLocaleString() + " bbl × 2 legs";
-  document.getElementById("sumNotional").textContent = fmt$(notional);
-  document.getElementById("sumLeverage").textContent = leverage.toFixed(2) + "x";
-  document.getElementById("sumSpread").textContent = fmtSign$(spread) + "/bbl";
+  const expectedPnl = hlHoodSpreadPnl + hlIbkrSpreadPnl + frPaid + frProjected;
+  const sumExpectedEl = document.getElementById("sumExpectedPnl");
+  sumExpectedEl.textContent = fmtPnl(expectedPnl);
+  sumExpectedEl.className = pnlClass(expectedPnl);
 
-  const sumHlPnlEl = document.getElementById("sumHlPnl");
-  sumHlPnlEl.textContent = hasHlPos ? fmtPnl(hlPnl) : "--";
-  sumHlPnlEl.className = hasHlPos ? pnlClass(hlPnl) : "";
-
-  const sumPnlEl = document.getElementById("sumPnl");
-  sumPnlEl.textContent = fmtSign$(expectedPnl, 0);
-  sumPnlEl.className = pnlClass(expectedPnl);
-
-  const sumRoiEl = document.getElementById("sumRoi");
-  const roiVal = totalCap > 0 ? (expectedPnl / totalCap * 100) : 0;
-  sumRoiEl.textContent = fmtPct(roiVal);
-  sumRoiEl.className = pnlClass(roiVal);
+  const totalCap = (hasHlPos ? hlBal : CFG.hlBal) + CFG.hoodBal + CFG.ibkrBal + CFG.reserve;
+  const expRoi = totalCap > 0 ? (expectedPnl / totalCap * 100) : 0;
+  const sumExpRoiEl = document.getElementById("sumExpectedRoi");
+  sumExpRoiEl.textContent = fmtPct(expRoi) + " (" + fmtPnl(expectedPnl) + " / " + fmt$(totalCap) + ")";
+  sumExpRoiEl.className = pnlClass(expRoi);
 
   // Alerts
   let alertHtml = "";
