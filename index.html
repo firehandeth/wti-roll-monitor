@@ -1094,6 +1094,15 @@ function render(market, hlPos) {
 
   document.getElementById("hoodContracts").textContent = CFG.hoodContracts + " MCL (" + hoodBbl.toLocaleString() + " bbl)";
   document.getElementById("hoodEntry").textContent = fmt$(CFG.hoodEntry, 2);
+  const hoodUpnl = (CFG.clmPrice - CFG.hoodEntry) * hoodBbl;
+  const hoodPnlEl = document.getElementById("hoodPnl");
+  if (CFG.hoodEntry > 0 && CFG.clmPrice > 0) {
+    hoodPnlEl.textContent = fmtPnl(hoodUpnl) + " (" + fmtPct((CFG.clmPrice / CFG.hoodEntry - 1) * 100) + ")";
+    hoodPnlEl.className = "value " + pnlClass(hoodUpnl);
+  } else {
+    hoodPnlEl.textContent = "需填入 Entry Price";
+    hoodPnlEl.className = "value neutral";
+  }
   document.getElementById("hoodBalance").textContent = fmt$(CFG.hoodBal);
   document.getElementById("hoodMargin").textContent = fmt$(hoodMargin);
   document.getElementById("hoodBuffer").textContent = fmt$(hoodBuf);
@@ -1112,6 +1121,15 @@ function render(market, hlPos) {
 
   document.getElementById("ibkrContracts").textContent = CFG.ibkrContracts + " MCL (" + ibkrBbl.toLocaleString() + " bbl)";
   document.getElementById("ibkrEntry").textContent = fmt$(CFG.ibkrEntry, 2);
+  const ibkrUpnl = (CFG.clmPrice - CFG.ibkrEntry) * ibkrBbl;
+  const ibkrPnlEl = document.getElementById("ibkrPnl");
+  if (CFG.ibkrEntry > 0 && CFG.clmPrice > 0) {
+    ibkrPnlEl.textContent = fmtPnl(ibkrUpnl) + " (" + fmtPct((CFG.clmPrice / CFG.ibkrEntry - 1) * 100) + ")";
+    ibkrPnlEl.className = "value " + pnlClass(ibkrUpnl);
+  } else {
+    ibkrPnlEl.textContent = "需填入 Entry Price";
+    ibkrPnlEl.className = "value neutral";
+  }
   document.getElementById("ibkrBalance").textContent = fmt$(CFG.ibkrBal);
   document.getElementById("ibkrMargin").textContent = fmt$(ibkrMargin);
   document.getElementById("ibkrBuffer").textContent = fmt$(ibkrBuf);
@@ -1234,4 +1252,3 @@ setInterval(refresh, 15000);
 </script>
 </body>
 </html>
-<!-- deployed Mon Apr  6 04:49:00 UTC 2026 -->
