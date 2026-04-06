@@ -476,7 +476,7 @@
     </div>
     <div class="card">
       <div class="card-label">CLM26 (CME June)</div>
-      <div class="card-value">$<input type="number" class="clm-input" id="clmInput" step="0.01" value="98.31" onchange="onClmChange()" onkeyup="onClmChange()"></div>
+      <div class="card-value" style="display:flex;align-items:center;gap:4px;">$<input type="number" class="clm-input" id="clmInput" step="0.01" value="98.31" onchange="onClmChange()" onkeyup="onClmChange()"><button id="clmLockBtn" onclick="toggleClmLock()" style="background:none;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;" title="锁定/解锁自动刷新">AUTO</button></div>
       <div class="card-sub" id="clmSource">手动输入 — 从券商App更新</div>
     </div>
     <div class="card">
@@ -703,6 +703,7 @@ const ALERTS_CFG = [
 ];
 
 let prevOracle = null;
+let clmLocked = false; // true = manual mode, skip Yahoo auto-refresh
 let lastMarket = null;
 let hlApiPos = null;
 
@@ -748,13 +749,35 @@ function saveConfig() {
   refresh();
 }
 
+function toggleClmLock() {
+  clmLocked = !clmLocked;
+  updateClmLockUI();
+  if (!clmLocked) refresh(); // unlock → immediately fetch Yahoo
+}
+
+function updateClmLockUI() {
+  const btn = document.getElementById("clmLockBtn");
+  const src = document.getElementById("clmSource");
+  if (clmLocked) {
+    btn.textContent = "MANUAL";
+    btn.style.borderColor = "var(--yellow)";
+    btn.style.color = "var(--yellow)";
+    src.textContent = "手动模式 — Yahoo 自动刷新已暂停";
+    src.style.color = "var(--yellow)";
+  } else {
+    btn.textContent = "AUTO";
+    btn.style.borderColor = "var(--border)";
+    btn.style.color = "var(--dim)";
+  }
+}
+
 // Inline CLM26 change handler
 function onClmChange() {
   const val = parseFloat(document.getElementById("clmInput").value);
   if (!isNaN(val) && val > 0) {
+    if (!clmLocked) { clmLocked = true; updateClmLockUI(); } // auto-lock on manual input
     CFG.clmPrice = val;
     localStorage.setItem("wtiCfg", JSON.stringify(CFG));
-    // Re-render calculator with current market data
     if (lastMarket) renderCalc(lastMarket);
   }
 }
@@ -1255,19 +1278,18 @@ function render(market, hlPos) {
 // Main loop
 // ============================================================
 async function refresh() {
-  const [market, clmPrice] = await Promise.all([
-    fetchMarket(),
-    fetchCLM26(),
-  ]);
+  const fetches = [fetchMarket()];
+  if (!clmLocked) fetches.push(fetchCLM26());
+  const [market, clmPrice] = await Promise.all(fetches);
   lastMarket = market;
 
-  // Update CLM26 price if fetched successfully
-  if (clmPrice) {
+  // Update CLM26 price if fetched successfully (only when not locked)
+  if (!clmLocked && clmPrice) {
     CFG.clmPrice = clmPrice;
     document.getElementById("clmInput").value = clmPrice.toFixed(2);
     document.getElementById("clmSource").textContent = "via Yahoo Finance — 自动刷新";
     document.getElementById("clmSource").style.color = "var(--green)";
-  } else if (!CFG.clmPrice) {
+  } else if (!clmLocked && !clmPrice && !CFG.clmPrice) {
     document.getElementById("clmSource").textContent = "获取失败 — 请手动输入";
     document.getElementById("clmSource").style.color = "var(--red)";
   }
