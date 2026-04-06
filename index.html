@@ -938,8 +938,8 @@ function renderCalc(market) {
 
   const totalMcl = 50; // calculator uses fixed 50 MCL
   const totalBbl = 5000;
-  const hlBal = (hlApiPos && hlApiPos.acctVal) ? hlApiPos.acctVal : (CFG.hlBal || 154000);
-  const totalCap = hlBal + (CFG.hoodBal || 128000) + (CFG.ibkrBal || 34500) + (CFG.reserve || 50000);
+  const hlBal = 154000;
+  const totalCap = hlBal + 128000 + 34500 + 50000; // fixed: HL 154k + Hood 128k + IBKR 34.5k + Reserve 50k = 366,500
 
   // S0
   const s0El = document.getElementById("pnlS0");
