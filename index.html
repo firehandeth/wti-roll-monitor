@@ -1150,9 +1150,10 @@ function render(market, hlPos) {
   sumHlUpnlEl.textContent = hasHlPos ? fmtPnl(hlPnl) : "--";
   sumHlUpnlEl.className = hasHlPos ? pnlClass(hlPnl) : "";
 
+  const hlFrPnl = -hlCumFr; // API returns positive=paid, negate for PnL
   const sumHlFrEl = document.getElementById("sumHlFr");
-  sumHlFrEl.textContent = hasHlPos ? fmtPnl(hlCumFr) : "--";
-  sumHlFrEl.className = hasHlPos ? pnlClass(hlCumFr) : "";
+  sumHlFrEl.textContent = hasHlPos ? fmtPnl(hlFrPnl) : "--";
+  sumHlFrEl.className = hasHlPos ? pnlClass(hlFrPnl) : "";
 
   const sumHoodUpnlEl = document.getElementById("sumHoodUpnl");
   if (CFG.hoodEntry > 0 && CFG.clmPrice > 0) {
@@ -1172,7 +1173,7 @@ function render(market, hlPos) {
     sumIbkrUpnlEl.className = "";
   }
 
-  const currentPnl = (hasHlPos ? hlPnl : 0) + (hasHlPos ? hlCumFr : 0) + hoodUpnl + ibkrUpnl;
+  const currentPnl = (hasHlPos ? hlPnl : 0) + (hasHlPos ? hlFrPnl : 0) + hoodUpnl + ibkrUpnl;
   const sumCurrentEl = document.getElementById("sumCurrentPnl");
   sumCurrentEl.textContent = fmtPnl(currentPnl);
   sumCurrentEl.className = pnlClass(currentPnl);
@@ -1193,7 +1194,7 @@ function render(market, hlPos) {
     sumIbkrSpreadEl.className = pnlClass(hlIbkrSpreadPnl);
   } else { sumIbkrSpreadEl.textContent = "--"; }
 
-  const frPaid = hasHlPos ? hlCumFr : 0;
+  const frPaid = hasHlPos ? hlFrPnl : 0; // negative = cost
   const sumPaidFrEl = document.getElementById("sumPaidFr");
   sumPaidFrEl.textContent = hasHlPos ? fmtPnl(frPaid) : "--";
   sumPaidFrEl.className = hasHlPos ? pnlClass(frPaid) : "";
