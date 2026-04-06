@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WTI Roll Arb Monitor</title>
+<style>
+  :root {
+    --bg: #131722;
+    --card: #1e222d;
+    --border: #2a2e39;
+    --text: #d1d4dc;
+    --dim: #787b86;
+    --green: #26a69a;
+    --red: #ef5350;
+    --yellow: #f7b84e;
+    --blue: #2196f3;
+    --orange: #e88a3a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'SF Mono', 'Menlo', monospace;
+    font-size: 14px;
+    padding: 16px;
+    min-height: 100vh;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .header .clocks {
+    font-size: 12px;
+    color: var(--dim);
+  }
+
+  .header .clocks span { margin-left: 16px; }
+
+  .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  .status-dot.error { background: var(--red); animation: none; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Grid Layout */
+  .grid { display: grid; gap: 12px; margin-bottom: 12px; }
+  .grid-5 { grid-template-columns: repeat(5, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-2 { grid-template-columns: 2fr 1fr; }
+  .grid-2eq { grid-template-columns: 1fr 1fr; }
+  .grid-1 { grid-template-columns: 1fr; }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+
+  .card-label {
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .card-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .card-sub {
+    font-size: 12px;
+    color: var(--dim);
+    margin-top: 4px;
+  }
+
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+  .warning { color: var(--yellow); }
+  .neutral { color: var(--dim); }
+
+  /* Inline CLM input */
+  .clm-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1.5px dashed var(--dim);
+    color: #fff;
+    font-size: 22px;
+    font-weight: 700;
+    width: 90px;
+    font-family: inherit;
+    outline: none;
+    padding: 0 0 2px 0;
+  }
+  .clm-input:focus { border-bottom-color: var(--blue); }
+  .clm-input:hover { border-bottom-color: var(--text); }
+
+  /* Entry Calculator */
+  .calc-section {
+    background: var(--card);
+    border: 1px solid var(--blue);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .calc-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .calc-title .refresh-hint {
+    font-size: 11px;
+    color: var(--dim);
+    font-weight: 400;
+  }
+
+  /* PnL breakdown */
+  .pnl-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .pnl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .pnl-table th {
+    text-align: left;
+    color: var(--dim);
+    font-weight: 500;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .pnl-table td {
+    padding: 6px 0;
+  }
+
+  .pnl-table .highlight td {
+    font-weight: 700;
+    font-size: 15px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+
+  .pnl-table td:last-child {
+    text-align: right;
+    font-weight: 600;
+  }
+
+  /* Position Cards */
+  .pos-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .pos-card .pos-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .pos-card .pos-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .pos-card .pos-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .badge-short { background: rgba(239,83,80,0.15); color: var(--red); }
+  .badge-long { background: rgba(38,166,154,0.15); color: var(--green); }
+
+  .pos-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+  }
+
+  .pos-row .label { color: var(--dim); }
+  .pos-row .value { color: var(--text); font-weight: 500; }
+
+  /* Roll Progress */
+  .roll-section { margin-bottom: 12px; }
+
+  .roll-bar-bg {
+    height: 28px;
+    background: #2a2e39;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    margin: 8px 0;
+  }
+
+  .roll-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    border-radius: 6px;
+    transition: width 1s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    min-width: 40px;
+  }
+
+  .roll-days {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+
+  .roll-day {
+    text-align: center;
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  .roll-day.done { color: var(--green); }
+  .roll-day.active { color: var(--yellow); }
+  .roll-day .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+    margin: 0 auto 4px;
+  }
+
+  .roll-day.done .dot { background: var(--green); }
+  .roll-day.active .dot { background: var(--yellow); }
+
+  /* Alerts */
+  .alert-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+
+  .alert-item {
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+  }
+
+  .alert-item:last-child { margin-bottom: 0; }
+  .alert-ok { background: rgba(38,166,154,0.1); color: var(--green); }
+  .alert-warn { background: rgba(247,184,78,0.15); color: var(--yellow); }
+  .alert-danger { background: rgba(239,83,80,0.15); color: var(--red); }
+
+  .alert-icon { margin-right: 8px; font-size: 16px; }
+
+  /* Liq gauge */
+  .liq-gauge {
+    margin-top: 8px;
+    height: 6px;
+    background: linear-gradient(90deg, var(--red), var(--yellow), var(--green));
+    border-radius: 3px;
+    position: relative;
+  }
+
+  .liq-marker {
+    position: absolute;
+    top: -3px;
+    width: 12px; height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    border: 2px solid var(--bg);
+  }
+
+  /* Settings */
+  .settings-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .settings-toggle:hover { border-color: var(--text); color: var(--text); }
+
+  .settings-panel {
+    display: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .settings-panel.show { display: block; }
+
+  .settings-panel label {
+    display: block;
+    font-size: 12px;
+    color: var(--dim);
+    margin-bottom: 4px;
+    margin-top: 10px;
+  }
+
+  .settings-panel label:first-child { margin-top: 0; }
+
+  .settings-panel input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    width: 200px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+
+  .settings-panel input:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  .settings-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .save-btn {
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    padding: 6px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+
+  @media (max-width: 900px) {
+    .grid-5 { grid-template-columns: repeat(3, 1fr); }
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: 1fr; }
+    .settings-row { grid-template-columns: 1fr; }
+    .pnl-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1><span class="status-dot" id="statusDot"></span>WTI Oracle Roll Arb Monitor</h1>
+  <div>
+    <button class="settings-toggle" onclick="refresh()" title="手动刷新">Refresh</button>
+    <button class="settings-toggle" onclick="toggleSettings()">Settings</button>
+    <span class="clocks">
+      <span id="clockUTC"></span>
+      <span id="clockCT"></span>
+      <span id="clockBJ"></span>
+    </span>
+  </div>
+</div>
+
+<!-- Settings Panel -->
+<div class="settings-panel" id="settingsPanel">
+  <div style="font-weight:600; margin-bottom:12px; color:#fff;">Position Config</div>
+  <div class="settings-row">
+    <div>
+      <div style="color:var(--red); font-weight:600; margin-bottom:8px;">HL (Short) — via API</div>
+      <label>Wallet Address</label>
+      <input id="cfgWallet" placeholder="0x..." style="width:100%">
+      <div style="color:var(--dim); font-size:11px; margin-top:6px;">Entry / Size / Balance / Liq 全部从链上读取</div>
+    </div>
+    <div>
+      <div style="color:var(--green); font-weight:600; margin-bottom:8px;">Robinhood (Long)</div>
+      <label>Contracts (MCL)</label>
+      <input id="cfgHoodContracts" type="number">
+      <label>Entry Price ($)</label>
+      <input id="cfgHoodEntry" type="number">
+      <label>Account Balance ($)</label>
+      <input id="cfgHoodBal" type="number">
+      <label>Stop Loss ($)</label>
+      <input id="cfgHoodStop" type="number">
+    </div>
+    <div>
+      <div style="color:var(--green); font-weight:600; margin-bottom:8px;">IBKR (Long)</div>
+      <label>Contracts (MCL)</label>
+      <input id="cfgIbkrContracts" type="number">
+      <label>Entry Price ($)</label>
+      <input id="cfgIbkrEntry" type="number">
+      <label>Account Balance ($)</label>
+      <input id="cfgIbkrBal" type="number">
+      <label>Stop Loss ($)</label>
+      <input id="cfgIbkrStop" type="number">
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <label>Reserve Cash ($)</label>
+    <input id="cfgReserve" type="number" style="width:120px">
+    <label>CLM26 Price (手动/备用)</label>
+    <input id="cfgClmPrice" type="number" step="0.01" style="width:120px">
+  </div>
+  <button class="save-btn" onclick="saveConfig()">Save & Refresh</button>
+</div>
+
+<!-- ====== ENTRY CALCULATOR (NEW) ====== -->
+<div class="calc-section">
+  <div class="calc-title">
+    <span>Entry Calculator — 开仓模拟器</span>
+    <span class="refresh-hint">实时刷新 15s | 平仓目标 4/14 21:30 UTC</span>
+  </div>
+
+  <!-- Row 1: Prices & Spread -->
+  <div class="grid grid-4" style="margin-bottom:0;">
+    <div class="card">
+      <div class="card-label">HL Oracle (CL Perp)</div>
+      <div class="card-value" id="calcOracle">--</div>
+      <div class="card-sub" id="calcOracleSub">via Hyperliquid API</div>
+    </div>
+    <div class="card">
+      <div class="card-label">CLM26 (CME June)</div>
+      <div class="card-value">$<input type="number" class="clm-input" id="clmInput" step="0.01" value="98.31" onchange="onClmChange()" onkeyup="onClmChange()"></div>
+      <div class="card-sub" id="clmSource">手动输入 — 从券商App更新</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Spread (Oracle − CLM)</div>
+      <div class="card-value" id="calcSpread">--</div>
+      <div class="card-sub" id="calcSpreadPct">--</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Basis (Mark − Oracle)</div>
+      <div class="card-value" id="calcBasis">--</div>
+      <div class="card-sub" id="calcBasisPct">--</div>
+    </div>
+  </div>
+
+  <!-- Row 2: FR & Costs -->
+  <div class="grid grid-4" style="margin-bottom:0;">
+    <div class="card">
+      <div class="card-label">当前 FR / 8h</div>
+      <div class="card-value" id="calcFr8h">--</div>
+      <div class="card-sub" id="calcFr8hDollar">--</div>
+    </div>
+    <div class="card">
+      <div class="card-label">剩余 FR 次数 (至 4/14)</div>
+      <div class="card-value" id="calcFrCount">--</div>
+      <div class="card-sub" id="calcFrCountSub">--</div>
+    </div>
+    <div class="card">
+      <div class="card-label">FR 总成本 (按当前恒定)</div>
+      <div class="card-value" id="calcFrTotal">--</div>
+      <div class="card-sub" id="calcFrTotalSub">每桶累计支付</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Mark Price / OI</div>
+      <div class="card-value" id="calcMark">--</div>
+      <div class="card-sub" id="calcOi">--</div>
+    </div>
+  </div>
+
+  <!-- PnL Breakdown -->
+  <div class="pnl-grid">
+    <div>
+      <table class="pnl-table">
+        <tr><th colspan="2" style="color:#fff; font-size:13px;">PnL 分解 (每桶)</th></tr>
+        <tr><td>S₀ 价差收益</td><td id="pnlS0">--</td></tr>
+        <tr><td>−Δb 基差成本</td><td id="pnlBasisCost">--</td></tr>
+        <tr><td>FR 资金费 (projected)</td><td id="pnlFrCost">--</td></tr>
+        <tr class="highlight"><td>Net PnL / barrel</td><td id="pnlNetBbl">--</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="pnl-table">
+        <tr><th colspan="2" style="color:#fff; font-size:13px;">总利润估算</th></tr>
+        <tr><td>每张 MCL (100 bbl)</td><td id="pnlPerMcl">--</td></tr>
+        <tr><td id="pnlTotalLabel">50 MCL (5,000 bbl)</td><td id="pnlTotal">--</td></tr>
+        <tr><td>100 MCL (10,000 bbl)</td><td id="pnlTotal100">--</td></tr>
+        <tr class="highlight"><td>ROI (100 MCL / 2×资金)</td><td id="pnlRoi">--</td></tr>
+        <tr class="highlight"><td>年化收益率</td><td id="pnlAnnual">--</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Market Data Row (existing, kept for monitoring detail) -->
+<div class="grid grid-5" id="marketRow" style="display:none;">
+  <div class="card">
+    <div class="card-label">Oracle Price</div>
+    <div class="card-value" id="oracle">--</div>
+    <div class="card-sub" id="oracleSub"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Mark Price</div>
+    <div class="card-value" id="mark">--</div>
+    <div class="card-sub" id="markSub"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Basis (Mark - Oracle)</div>
+    <div class="card-value" id="basis">--</div>
+    <div class="card-sub" id="basisSub"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Funding Rate /8h</div>
+    <div class="card-value" id="funding">--</div>
+    <div class="card-sub" id="fundingSub"></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Open Interest</div>
+    <div class="card-value" id="oi">--</div>
+    <div class="card-sub" id="oiSub"></div>
+  </div>
+</div>
+
+<!-- Roll Progress -->
+<div class="card roll-section">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="card-label" style="margin:0;">Roll Progress</div>
+    <div style="font-size:12px;"><span id="rollProfit" class="positive">$0</span> estimated accrued</div>
+  </div>
+  <div class="roll-bar-bg">
+    <div class="roll-bar-fill" id="rollBar" style="width:0%">0%</div>
+  </div>
+  <div class="roll-days" id="rollDays"></div>
+</div>
+
+<!-- Positions -->
+<div class="grid grid-3">
+  <!-- HL -->
+  <div class="pos-card" id="hlCard">
+    <div class="pos-header">
+      <span class="pos-title">HL — xyz:CL Perpetual</span>
+      <span class="pos-badge badge-short">SHORT</span>
+    </div>
+    <div class="pos-row"><span class="label">Size</span><span class="value" id="hlSize">--</span></div>
+    <div class="pos-row"><span class="label">Entry</span><span class="value" id="hlEntry">--</span></div>
+    <div class="pos-row"><span class="label">Current</span><span class="value" id="hlCurrent">--</span></div>
+    <div class="pos-row"><span class="label">UPnL</span><span class="value" id="hlPnl">--</span></div>
+    <div class="pos-row"><span class="label">Cum Funding</span><span class="value" id="hlFunding">--</span></div>
+    <div class="pos-row"><span class="label">Balance</span><span class="value" id="hlBalance">--</span></div>
+    <div class="pos-row"><span class="label">Liq Price</span><span class="value" id="hlLiq">--</span></div>
+    <div class="pos-row"><span class="label">Stop Loss</span><span class="value" id="hlStop">--</span></div>
+    <div class="liq-gauge"><div class="liq-marker" id="hlLiqMarker" style="left:80%"></div></div>
+  </div>
+  <!-- Robinhood -->
+  <div class="pos-card">
+    <div class="pos-header">
+      <span class="pos-title">Robinhood — CLM26</span>
+      <span class="pos-badge badge-long">LONG</span>
+    </div>
+    <div class="pos-row"><span class="label">Contracts</span><span class="value" id="hoodContracts">--</span></div>
+    <div class="pos-row"><span class="label">Entry</span><span class="value" id="hoodEntry">--</span></div>
+    <div class="pos-row"><span class="label">UPnL</span><span class="value neutral" id="hoodPnl">手动查看 App</span></div>
+    <div class="pos-row"><span class="label">Balance</span><span class="value" id="hoodBalance">--</span></div>
+    <div class="pos-row"><span class="label">Margin Used</span><span class="value" id="hoodMargin">--</span></div>
+    <div class="pos-row"><span class="label">Buffer</span><span class="value" id="hoodBuffer">--</span></div>
+    <div class="pos-row"><span class="label">Liq Price</span><span class="value" id="hoodLiq">--</span></div>
+    <div class="pos-row"><span class="label">Stop Loss</span><span class="value" id="hoodStop">--</span></div>
+    <div class="liq-gauge"><div class="liq-marker" id="hoodLiqMarker" style="left:80%"></div></div>
+  </div>
+  <!-- IBKR -->
+  <div class="pos-card">
+    <div class="pos-header">
+      <span class="pos-title">IBKR — CLM26</span>
+      <span class="pos-badge badge-long">LONG</span>
+    </div>
+    <div class="pos-row"><span class="label">Contracts</span><span class="value" id="ibkrContracts">--</span></div>
+    <div class="pos-row"><span class="label">Entry</span><span class="value" id="ibkrEntry">--</span></div>
+    <div class="pos-row"><span class="label">UPnL</span><span class="value neutral" id="ibkrPnl">手动查看 App</span></div>
+    <div class="pos-row"><span class="label">Balance</span><span class="value" id="ibkrBalance">--</span></div>
+    <div class="pos-row"><span class="label">Margin Used</span><span class="value" id="ibkrMargin">--</span></div>
+    <div class="pos-row"><span class="label">Buffer</span><span class="value" id="ibkrBuffer">--</span></div>
+    <div class="pos-row"><span class="label">Liq Price</span><span class="value" id="ibkrLiq">--</span></div>
+    <div class="pos-row"><span class="label">Stop Loss</span><span class="value" id="ibkrStop">--</span></div>
+    <div class="liq-gauge"><div class="liq-marker" id="ibkrLiqMarker" style="left:85%"></div></div>
+  </div>
+</div>
+
+<!-- Summary + Alerts -->
+<div class="grid grid-2">
+  <!-- Portfolio Summary -->
+  <div class="card">
+    <div class="card-label" style="margin-bottom:10px;">Portfolio Summary</div>
+    <table class="pnl-table">
+      <tr><th>Item</th><th>Value</th></tr>
+      <tr><td>Total Capital</td><td id="sumCapital">--</td></tr>
+      <tr><td>Total Position</td><td id="sumPosition">--</td></tr>
+      <tr><td>Notional Value</td><td id="sumNotional">--</td></tr>
+      <tr><td>Overall Leverage</td><td id="sumLeverage">--</td></tr>
+      <tr><td>Spread S₀</td><td id="sumSpread">--</td></tr>
+      <tr><td>HL UPnL (live)</td><td id="sumHlPnl">--</td></tr>
+      <tr class="highlight"><td>Expected Net PnL</td><td id="sumPnl" class="positive">--</td></tr>
+      <tr class="highlight"><td>Expected ROI</td><td id="sumRoi" class="positive">--</td></tr>
+    </table>
+  </div>
+  <!-- Alerts -->
+  <div class="alert-panel">
+    <div class="card-label" style="margin-bottom:10px;">Alert Status</div>
+    <div id="alertList"></div>
+  </div>
+</div>
+
+<div style="text-align:center; padding:16px; color:var(--dim); font-size:11px;">
+  Auto-refresh 15s &nbsp;|&nbsp; CME PnL 请查看 Robinhood / IBKR App &nbsp;|&nbsp;
+  HL data via Hyperliquid API
+</div>
+
+<script>
+// ============================================================
+// Config
+// ============================================================
+const DEFAULT_CONFIG = {
+  wallet: "",
+  hlStop: 0,
+  hlBal: 0,
+  hoodContracts: 0, hoodEntry: 0, hoodBal: 0, hoodStop: 0,
+  ibkrContracts: 0, ibkrEntry: 0, ibkrBal: 0, ibkrStop: 0,
+  reserve: 0,
+  clmPrice: 98.31,
+};
+
+let CFG = { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem("wtiCfg") || "{}") };
+
+const ROLL_SCHEDULE = [
+  { name: "RD1", date: "2026-04-08", wAfter: 0.80 },
+  { name: "RD2", date: "2026-04-09", wAfter: 0.60 },
+  { name: "RD3", date: "2026-04-10", wAfter: 0.40 },
+  { name: "RD4", date: "2026-04-13", wAfter: 0.20 },
+  { name: "RD5", date: "2026-04-14", wAfter: 0.00 },
+];
+
+// Close target: RD5 day, 17:30 EDT = 21:30 UTC
+const CLOSE_TARGET = new Date("2026-04-14T21:30:00Z");
+
+const ALERTS_CFG = [
+  { price: 118, dir: "above", msg: "第1档：准备转 $15K 到 HL", level: "warn" },
+  { price: 123, dir: "above", msg: "第2档：转 $20K 到 HL",     level: "warn" },
+  { price: 128, dir: "above", msg: "第3档：转 $15K + 评估减仓", level: "danger" },
+  { price: 133, dir: "above", msg: "强制减仓 1/3",              level: "danger" },
+  { price: 85,  dir: "below", msg: "CME 侧关注",               level: "warn" },
+];
+
+let prevOracle = null;
+let lastMarket = null;
+let hlApiPos = null;
+
+// ============================================================
+// Settings UI
+// ============================================================
+function toggleSettings() {
+  const p = document.getElementById("settingsPanel");
+  p.classList.toggle("show");
+  if (p.classList.contains("show")) loadConfigToUI();
+}
+
+function loadConfigToUI() {
+  document.getElementById("cfgWallet").value = CFG.wallet;
+  document.getElementById("cfgHoodContracts").value = CFG.hoodContracts;
+  document.getElementById("cfgHoodEntry").value = CFG.hoodEntry;
+  document.getElementById("cfgHoodBal").value = CFG.hoodBal;
+  document.getElementById("cfgHoodStop").value = CFG.hoodStop;
+  document.getElementById("cfgIbkrContracts").value = CFG.ibkrContracts;
+  document.getElementById("cfgIbkrEntry").value = CFG.ibkrEntry;
+  document.getElementById("cfgIbkrBal").value = CFG.ibkrBal;
+  document.getElementById("cfgIbkrStop").value = CFG.ibkrStop;
+  document.getElementById("cfgReserve").value = CFG.reserve;
+  document.getElementById("cfgClmPrice").value = CFG.clmPrice;
+}
+
+function saveConfig() {
+  CFG.wallet = document.getElementById("cfgWallet").value.trim();
+  CFG.hoodContracts = parseInt(document.getElementById("cfgHoodContracts").value);
+  CFG.hoodEntry = parseFloat(document.getElementById("cfgHoodEntry").value);
+  CFG.hoodBal = parseFloat(document.getElementById("cfgHoodBal").value);
+  CFG.hoodStop = parseFloat(document.getElementById("cfgHoodStop").value);
+  CFG.ibkrContracts = parseInt(document.getElementById("cfgIbkrContracts").value);
+  CFG.ibkrEntry = parseFloat(document.getElementById("cfgIbkrEntry").value);
+  CFG.ibkrBal = parseFloat(document.getElementById("cfgIbkrBal").value);
+  CFG.ibkrStop = parseFloat(document.getElementById("cfgIbkrStop").value);
+  CFG.reserve = parseFloat(document.getElementById("cfgReserve").value);
+  CFG.clmPrice = parseFloat(document.getElementById("cfgClmPrice").value);
+  localStorage.setItem("wtiCfg", JSON.stringify(CFG));
+  document.getElementById("settingsPanel").classList.remove("show");
+  // Sync CLM input
+  document.getElementById("clmInput").value = CFG.clmPrice;
+  refresh();
+}
+
+// Inline CLM26 change handler
+function onClmChange() {
+  const val = parseFloat(document.getElementById("clmInput").value);
+  if (!isNaN(val) && val > 0) {
+    CFG.clmPrice = val;
+    localStorage.setItem("wtiCfg", JSON.stringify(CFG));
+    // Re-render calculator with current market data
+    if (lastMarket) renderCalc(lastMarket);
+  }
+}
+
+// ============================================================
+// API
+// ============================================================
+async function fetchMarket() {
+  try {
+    const resp = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "metaAndAssetCtxs", dex: "xyz" }),
+    });
+    const data = await resp.json();
+    const meta = data[0].universe;
+    const ctxs = data[1];
+    for (let i = 0; i < meta.length; i++) {
+      if (meta[i].name === "xyz:CL") {
+        const c = ctxs[i];
+        return {
+          oracle: parseFloat(c.oraclePx),
+          mark: parseFloat(c.markPx),
+          funding: parseFloat(c.funding),
+          oi: parseFloat(c.openInterest),
+          premium: parseFloat(c.premium || 0),
+        };
+      }
+    }
+  } catch (e) {
+    console.error("Market fetch error:", e);
+    return null;
+  }
+}
+
+async function fetchCLM26() {
+  const proxies = [
+    (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
+    (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  ];
+  const url = "https://query1.finance.yahoo.com/v8/finance/chart/CLM26.NYM?interval=1d&range=1d";
+  for (const proxy of proxies) {
+    try {
+      const resp = await fetch(proxy(url), { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price && price > 0) {
+        return price;
+      }
+    } catch (e) {
+      console.warn("CLM26 proxy failed:", e);
+    }
+  }
+  return null; // fallback to manual
+}
+
+async function fetchHlPosition(wallet) {
+  if (!wallet) return null;
+  try {
+    const resp = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "clearinghouseState", user: wallet, dex: "xyz" }),
+    });
+    const data = await resp.json();
+    const ms = data.marginSummary || {};
+    const acctVal = parseFloat(ms.accountValue || 0);
+    for (const ap of (data.assetPositions || [])) {
+      const p = ap.position || {};
+      if (p.coin === "xyz:CL") {
+        return {
+          size: parseFloat(p.szi),
+          entry: parseFloat(p.entryPx),
+          pnl: parseFloat(p.unrealizedPnl),
+          liq: parseFloat(p.liquidationPx || 0),
+          margin: parseFloat(p.marginUsed),
+          acctVal: acctVal,
+          cumFunding: parseFloat((p.cumFunding || {}).sinceOpen || 0),
+        };
+      }
+    }
+    return { size: 0, acctVal: acctVal };
+  } catch (e) {
+    console.error("HL position fetch error:", e);
+    return null;
+  }
+}
+
+// ============================================================
+// Calculations
+// ============================================================
+function calcCmeLiq(entry, balPerBbl) {
+  return entry - balPerBbl + 10.80;
+}
+
+function getRollStatus() {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  let wF = 1.0, completed = 0, next = null;
+  for (const rd of ROLL_SCHEDULE) {
+    if (todayStr > rd.date) { wF = rd.wAfter; completed++; }
+    else if (!next) { next = rd; }
+  }
+  return { wF, wN: 1 - wF, completed, total: 5, progress: completed / 5, next };
+}
+
+function getRemainingFrHours() {
+  const now = new Date();
+  const ms = CLOSE_TARGET - now;
+  if (ms <= 0) return { hours: 0, days: 0, hoursRem: 0 };
+  const totalHours = Math.floor(ms / 3600000);
+  const days = Math.floor(totalHours / 24);
+  const hoursRem = totalHours % 24;
+  return { hours: totalHours, days, hoursRem };
+}
+
+function fmt$(v, dec = 0) { return "$" + v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
+function fmtSign$(v, dec = 2) { return (v >= 0 ? "+$" : "-$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
+function fmtPct(v) { return (v >= 0 ? "+" : "") + v.toFixed(1) + "%"; }
+function fmtPnl(v) { return (v >= 0 ? "+" : "") + fmt$(v); }
+function pnlClass(v) { return v >= 0 ? "positive" : "negative"; }
+
+// ============================================================
+// Render: Entry Calculator
+// ============================================================
+function renderCalc(market) {
+  if (!market) return;
+
+  const oracle = market.oracle;
+  const mark = market.mark;
+  const clm = CFG.clmPrice;
+  const frHourly = market.funding; // decimal per hour
+
+  // --- Prices & Spread ---
+  document.getElementById("calcOracle").textContent = fmt$(oracle, 2);
+  const oracleChange = prevOracle ? oracle - prevOracle : 0;
+  document.getElementById("calcOracleSub").innerHTML = prevOracle
+    ? `<span class="${oracleChange >= 0 ? 'positive' : 'negative'}">${oracleChange >= 0 ? '▲' : '▼'} $${Math.abs(oracleChange).toFixed(2)}</span>`
+    : "via Hyperliquid API";
+
+  const spread = oracle - clm;
+  const spreadPct = clm > 0 ? (spread / clm * 100) : 0;
+  const spreadEl = document.getElementById("calcSpread");
+  spreadEl.textContent = fmtSign$(spread);
+  spreadEl.className = "card-value " + pnlClass(spread);
+  document.getElementById("calcSpreadPct").textContent = fmtPct(spreadPct);
+
+  const basis = mark - oracle;
+  const basisPct = oracle > 0 ? (basis / oracle * 100) : 0;
+  const basisEl = document.getElementById("calcBasis");
+  basisEl.textContent = "$" + basis.toFixed(3);
+  basisEl.className = "card-value " + (Math.abs(basis) < 0.5 ? "positive" : Math.abs(basis) < 1.5 ? "warning" : "negative");
+  document.getElementById("calcBasisPct").textContent = basisPct.toFixed(3) + "% | " + (Math.abs(basis) < 0.5 ? "正常" : Math.abs(basis) < 1.5 ? "关注" : "异常");
+
+  // --- FR ---
+  const fr8h = frHourly * 8; // decimal
+  const fr8hPct = fr8h * 100;
+  const fr8hDollar = fr8h * oracle;
+  const frEl = document.getElementById("calcFr8h");
+  frEl.textContent = fr8hPct.toFixed(4) + "%";
+  frEl.className = "card-value " + (fr8h >= 0 ? "positive" : fr8h > -0.001 ? "warning" : "negative");
+  document.getElementById("calcFr8hDollar").textContent = fmtSign$(fr8hDollar) + "/bbl/8h | " + (fr8h >= 0 ? "空头收取" : "空头支付");
+
+  // Remaining FR
+  const frRemaining = getRemainingFrHours();
+  document.getElementById("calcFrCount").textContent = frRemaining.hours + " 次";
+  document.getElementById("calcFrCountSub").textContent = frRemaining.days + "天" + frRemaining.hoursRem + "小时 → 4/14 收盘";
+
+  // FR total projected
+  const frPerHourDollar = frHourly * oracle;
+  const frTotalDollar = frPerHourDollar * frRemaining.hours;
+  const frTotalEl = document.getElementById("calcFrTotal");
+  frTotalEl.textContent = fmtSign$(frTotalDollar) + "/bbl";
+  frTotalEl.className = "card-value " + pnlClass(frTotalDollar);
+  document.getElementById("calcFrTotalSub").textContent = "= " + frRemaining.hours + "h × " + fmtSign$(frPerHourDollar, 4) + "/h";
+
+  // Mark & OI
+  document.getElementById("calcMark").textContent = fmt$(mark, 2);
+  document.getElementById("calcOi").textContent = (market.oi / 1000).toFixed(0) + "K bbl (" + fmt$(market.oi * mark / 1e6, 1) + "M)";
+
+  // --- PnL Breakdown ---
+  const s0 = spread;
+  const basisCost = basis; // −Δb = −(0 − b₀) = b₀; if b₀ < 0, it's a cost
+  const frCost = frTotalDollar; // negative if we're paying
+  const netPnlBbl = s0 + basisCost + frCost;
+
+  const totalMcl = 50; // calculator uses fixed 50 MCL
+  const totalBbl = 5000;
+  const hlBal = (hlApiPos && hlApiPos.acctVal) ? hlApiPos.acctVal : (CFG.hlBal || 154000);
+  const totalCap = hlBal + (CFG.hoodBal || 128000) + (CFG.ibkrBal || 34500) + (CFG.reserve || 50000);
+
+  // S0
+  const s0El = document.getElementById("pnlS0");
+  s0El.textContent = fmtSign$(s0) + "/bbl";
+  s0El.className = pnlClass(s0);
+
+  // Basis
+  const basisCostEl = document.getElementById("pnlBasisCost");
+  basisCostEl.textContent = fmtSign$(basisCost) + "/bbl";
+  basisCostEl.className = pnlClass(basisCost);
+
+  // FR
+  const frCostEl = document.getElementById("pnlFrCost");
+  frCostEl.textContent = fmtSign$(frCost) + "/bbl";
+  frCostEl.className = pnlClass(frCost);
+
+  // Net PnL per bbl
+  const netBblEl = document.getElementById("pnlNetBbl");
+  netBblEl.textContent = fmtSign$(netPnlBbl) + "/bbl";
+  netBblEl.className = pnlClass(netPnlBbl);
+
+  // Per MCL
+  const perMcl = netPnlBbl * 100;
+  const perMclEl = document.getElementById("pnlPerMcl");
+  perMclEl.textContent = fmtSign$(perMcl, 0);
+  perMclEl.className = pnlClass(perMcl);
+
+  // Total 50 MCL
+  const totalPnl = netPnlBbl * totalBbl;
+  document.getElementById("pnlTotalLabel").textContent = totalMcl + " MCL (" + totalBbl.toLocaleString() + " bbl)";
+  const totalEl = document.getElementById("pnlTotal");
+  totalEl.textContent = fmtSign$(totalPnl, 0);
+  totalEl.className = pnlClass(totalPnl);
+
+  // Total 100 MCL
+  const totalPnl100 = netPnlBbl * 10000;
+  const total100El = document.getElementById("pnlTotal100");
+  total100El.textContent = fmtSign$(totalPnl100, 0);
+  total100El.className = pnlClass(totalPnl100);
+
+  // ROI = 100 MCL profit / (2 × 单边资金)
+  const totalCap2x = totalCap * 2;
+  const roi = totalCap2x > 0 ? (totalPnl100 / totalCap2x * 100) : 0;
+  const roiEl = document.getElementById("pnlRoi");
+  roiEl.textContent = fmtPct(roi) + " (" + fmtSign$(totalPnl100, 0) + " / " + fmt$(totalCap2x, 0) + ")";
+  roiEl.className = pnlClass(roi);
+
+  // 年化收益率 = ROI / 持仓天数 × 365
+  const frRemain = getRemainingFrHours();
+  const holdingDays = frRemain.hours / 24;
+  const annualized = holdingDays > 0 ? (roi / holdingDays * 365) : 0;
+  const annualEl = document.getElementById("pnlAnnual");
+  annualEl.textContent = fmtPct(annualized) + " (" + holdingDays.toFixed(1) + "天持仓)";
+  annualEl.className = pnlClass(annualized);
+}
+
+// ============================================================
+// Render: Positions & Summary
+// ============================================================
+function render(market, hlPos) {
+  // Clocks
+  const now = new Date();
+  document.getElementById("clockUTC").textContent = "UTC " + now.toISOString().slice(11, 19);
+  const ctOffset = -5; // CDT in April
+  const ct = new Date(now.getTime() + ctOffset * 3600000);
+  document.getElementById("clockCT").textContent = "Houston " + ct.toISOString().slice(11, 16);
+  const bj = new Date(now.getTime() + 8 * 3600000);
+  document.getElementById("clockBJ").textContent = "Beijing " + bj.toISOString().slice(5, 16).replace("T", " ");
+
+  // Status dot
+  const dot = document.getElementById("statusDot");
+  dot.className = market ? "status-dot" : "status-dot error";
+
+  if (!market) return;
+
+  const oracle = market.oracle;
+  const mark = market.mark;
+
+  // Render the entry calculator
+  renderCalc(market);
+
+  prevOracle = oracle;
+
+  // Roll progress
+  const rs = getRollStatus();
+  const rollBar = document.getElementById("rollBar");
+  rollBar.style.width = (rs.progress * 100) + "%";
+  rollBar.textContent = (rs.progress * 100).toFixed(0) + "%";
+
+  const totalMcl = CFG.hoodContracts + CFG.ibkrContracts;
+  const totalBbl = totalMcl * 100;
+  const spread = oracle - CFG.clmPrice;
+  const estProfit = spread * rs.progress * totalBbl;
+  document.getElementById("rollProfit").textContent = fmt$(estProfit);
+
+  // Roll day dots
+  let daysHtml = "";
+  const todayStr = now.toISOString().slice(0, 10);
+  for (const rd of ROLL_SCHEDULE) {
+    const cls = todayStr > rd.date ? "done" : todayStr === rd.date ? "active" : "";
+    daysHtml += `<div class="roll-day ${cls}"><div class="dot"></div>${rd.name}<br>${rd.date.slice(5)}</div>`;
+  }
+  document.getElementById("rollDays").innerHTML = daysHtml;
+
+  // HL Position — always from API
+  const hasHlPos = hlPos && hlPos.size && hlPos.size !== 0;
+  let hlEntry = 0, hlSize = 0, hlBal = 0, hlPnl = 0, hlLiq = 0, hlCumFr = 0;
+
+  if (hasHlPos) {
+    hlEntry = hlPos.entry;
+    hlSize = Math.abs(hlPos.size);
+    hlBal = hlPos.acctVal;
+    hlPnl = hlPos.pnl;
+    hlLiq = hlPos.liq;
+    hlCumFr = hlPos.cumFunding;
+
+    document.getElementById("hlSize").textContent = hlSize.toLocaleString() + " barrels";
+    document.getElementById("hlEntry").textContent = fmt$(hlEntry, 2);
+    document.getElementById("hlCurrent").textContent = fmt$(mark, 2);
+    const hlPnlEl = document.getElementById("hlPnl");
+    hlPnlEl.textContent = fmtPnl(hlPnl);
+    hlPnlEl.className = "value " + pnlClass(hlPnl);
+    document.getElementById("hlFunding").textContent = fmtPnl(hlCumFr);
+    document.getElementById("hlBalance").textContent = fmt$(hlBal);
+
+    const hlLiqDist = (hlLiq / hlEntry - 1) * 100;
+    const hlLiqEl = document.getElementById("hlLiq");
+    hlLiqEl.textContent = fmt$(hlLiq, 2) + " (" + fmtPct(hlLiqDist) + ")";
+    hlLiqEl.className = "value " + (hlLiqDist > 20 ? "positive" : hlLiqDist > 15 ? "warning" : "negative");
+    document.getElementById("hlStop").textContent = fmt$(CFG.hlStop);
+
+    const hlGaugePct = Math.max(0, Math.min(100, (1 - (mark - hlEntry) / (hlLiq - hlEntry)) * 100));
+    document.getElementById("hlLiqMarker").style.left = hlGaugePct + "%";
+  } else {
+    const noData = CFG.wallet ? "No open position" : "填入 Wallet 地址";
+    document.getElementById("hlSize").textContent = noData;
+    document.getElementById("hlEntry").textContent = "--";
+    document.getElementById("hlCurrent").textContent = fmt$(mark, 2);
+    document.getElementById("hlPnl").textContent = "--";
+    document.getElementById("hlFunding").textContent = "--";
+    document.getElementById("hlBalance").textContent = CFG.wallet && hlPos ? fmt$(hlPos.acctVal || 0) : "--";
+    document.getElementById("hlLiq").textContent = "--";
+    document.getElementById("hlStop").textContent = fmt$(CFG.hlStop);
+  }
+
+  // Hood
+  const hoodBbl = CFG.hoodContracts * 100;
+  const hoodMargin = CFG.hoodContracts * 2443;
+  const hoodBuf = CFG.hoodBal - hoodMargin;
+  const hoodLiq = calcCmeLiq(CFG.hoodEntry, CFG.hoodBal / hoodBbl);
+  const hoodLiqDist = (hoodLiq / CFG.hoodEntry - 1) * 100;
+
+  document.getElementById("hoodContracts").textContent = CFG.hoodContracts + " MCL (" + hoodBbl.toLocaleString() + " bbl)";
+  document.getElementById("hoodEntry").textContent = fmt$(CFG.hoodEntry, 2);
+  document.getElementById("hoodBalance").textContent = fmt$(CFG.hoodBal);
+  document.getElementById("hoodMargin").textContent = fmt$(hoodMargin);
+  document.getElementById("hoodBuffer").textContent = fmt$(hoodBuf);
+  const hoodLiqEl = document.getElementById("hoodLiq");
+  hoodLiqEl.textContent = fmt$(hoodLiq, 2) + " (" + fmtPct(hoodLiqDist) + ")";
+  hoodLiqEl.className = "value " + (Math.abs(hoodLiqDist) > 20 ? "positive" : Math.abs(hoodLiqDist) > 15 ? "warning" : "negative");
+  document.getElementById("hoodStop").textContent = fmt$(CFG.hoodStop);
+  document.getElementById("hoodLiqMarker").style.left = "80%";
+
+  // IBKR
+  const ibkrBbl = CFG.ibkrContracts * 100;
+  const ibkrMargin = CFG.ibkrContracts * 2443;
+  const ibkrBuf = CFG.ibkrBal - ibkrMargin;
+  const ibkrLiq = calcCmeLiq(CFG.ibkrEntry, CFG.ibkrBal / ibkrBbl);
+  const ibkrLiqDist = (ibkrLiq / CFG.ibkrEntry - 1) * 100;
+
+  document.getElementById("ibkrContracts").textContent = CFG.ibkrContracts + " MCL (" + ibkrBbl.toLocaleString() + " bbl)";
+  document.getElementById("ibkrEntry").textContent = fmt$(CFG.ibkrEntry, 2);
+  document.getElementById("ibkrBalance").textContent = fmt$(CFG.ibkrBal);
+  document.getElementById("ibkrMargin").textContent = fmt$(ibkrMargin);
+  document.getElementById("ibkrBuffer").textContent = fmt$(ibkrBuf);
+  const ibkrLiqEl = document.getElementById("ibkrLiq");
+  ibkrLiqEl.textContent = fmt$(ibkrLiq, 2) + " (" + fmtPct(ibkrLiqDist) + ")";
+  ibkrLiqEl.className = "value " + (Math.abs(ibkrLiqDist) > 20 ? "positive" : Math.abs(ibkrLiqDist) > 15 ? "warning" : "negative");
+  document.getElementById("ibkrStop").textContent = fmt$(CFG.ibkrStop);
+
+  // Summary
+  const cmeBbl = totalBbl;
+  const summaryBbl = hasHlPos ? hlSize : cmeBbl;
+  const hlBalForSummary = hasHlPos ? hlBal : CFG.hlBal;
+  const totalCap = hlBalForSummary + CFG.hoodBal + CFG.ibkrBal + CFG.reserve;
+  const hlNotional = summaryBbl * (hlEntry || mark);
+  const cmeNotional = cmeBbl * CFG.hoodEntry;
+  const notional = hlNotional + cmeNotional;
+  const leverage = totalCap > 0 ? notional / totalCap : 0;
+
+  // Use calculator's net PnL for summary
+  const basis = mark - oracle;
+  const frRemaining = getRemainingFrHours();
+  const frTotalDollar = market.funding * oracle * frRemaining.hours;
+  const netPnlBbl = spread + basis + frTotalDollar;
+  const expectedPnl = netPnlBbl * summaryBbl;
+
+  document.getElementById("sumCapital").textContent = fmt$(totalCap) + " (incl " + fmt$(CFG.reserve) + " reserve)";
+  document.getElementById("sumPosition").textContent = summaryBbl.toLocaleString() + " bbl × 2 legs";
+  document.getElementById("sumNotional").textContent = fmt$(notional);
+  document.getElementById("sumLeverage").textContent = leverage.toFixed(2) + "x";
+  document.getElementById("sumSpread").textContent = fmtSign$(spread) + "/bbl";
+
+  const sumHlPnlEl = document.getElementById("sumHlPnl");
+  sumHlPnlEl.textContent = hasHlPos ? fmtPnl(hlPnl) : "--";
+  sumHlPnlEl.className = hasHlPos ? pnlClass(hlPnl) : "";
+
+  const sumPnlEl = document.getElementById("sumPnl");
+  sumPnlEl.textContent = fmtSign$(expectedPnl, 0);
+  sumPnlEl.className = pnlClass(expectedPnl);
+
+  const sumRoiEl = document.getElementById("sumRoi");
+  const roiVal = totalCap > 0 ? (expectedPnl / totalCap * 100) : 0;
+  sumRoiEl.textContent = fmtPct(roiVal);
+  sumRoiEl.className = pnlClass(roiVal);
+
+  // Alerts
+  let alertHtml = "";
+  let hasAlert = false;
+  for (const a of ALERTS_CFG) {
+    const triggered = (a.dir === "above" && oracle >= a.price) || (a.dir === "below" && oracle <= a.price);
+    if (triggered) {
+      hasAlert = true;
+      const cls = a.level === "danger" ? "alert-danger" : "alert-warn";
+      const icon = a.level === "danger" ? "🚨" : "⚠️";
+      alertHtml += `<div class="alert-item ${cls}"><span class="alert-icon">${icon}</span>$${a.price} — ${a.msg}</div>`;
+    }
+  }
+  if (!hasAlert) {
+    alertHtml = `<div class="alert-item alert-ok"><span class="alert-icon">✓</span>All clear — Oracle $${oracle.toFixed(2)} in safe range</div>`;
+  }
+
+  if (Math.abs(basis) >= 1.5) {
+    alertHtml += `<div class="alert-item alert-danger"><span class="alert-icon">🚨</span>Basis $${basis.toFixed(3)} — 异常，立刻调查</div>`;
+  } else if (Math.abs(basis) >= 0.5) {
+    alertHtml += `<div class="alert-item alert-warn"><span class="alert-icon">⚠️</span>Basis $${basis.toFixed(3)} — 关注</div>`;
+  }
+
+  const fr8hPct = market.funding * 8 * 100;
+  if (fr8hPct < -0.3) {
+    alertHtml += `<div class="alert-item alert-warn"><span class="alert-icon">⚠️</span>Funding ${fr8hPct.toFixed(4)}%/8h — 拥挤信号</div>`;
+  }
+
+  document.getElementById("alertList").innerHTML = alertHtml;
+
+  if (hasAlert && Notification.permission === "granted") {
+    new Notification("WTI Monitor Alert", { body: "Price alert triggered!" });
+  }
+}
+
+// ============================================================
+// Main loop
+// ============================================================
+async function refresh() {
+  const [market, clmPrice] = await Promise.all([
+    fetchMarket(),
+    fetchCLM26(),
+  ]);
+  lastMarket = market;
+
+  // Update CLM26 price if fetched successfully
+  if (clmPrice) {
+    CFG.clmPrice = clmPrice;
+    document.getElementById("clmInput").value = clmPrice.toFixed(2);
+    document.getElementById("clmSource").textContent = "via Yahoo Finance — 自动刷新";
+    document.getElementById("clmSource").style.color = "var(--green)";
+  } else if (!CFG.clmPrice) {
+    document.getElementById("clmSource").textContent = "获取失败 — 请手动输入";
+    document.getElementById("clmSource").style.color = "var(--red)";
+  }
+
+  let hlPos = null;
+  if (CFG.wallet) {
+    hlPos = await fetchHlPosition(CFG.wallet);
+    hlApiPos = hlPos;
+  }
+
+  render(market, hlPos);
+}
+
+// Init CLM input from config
+document.getElementById("clmInput").value = CFG.clmPrice;
+
+// Request notification permission
+if ("Notification" in window && Notification.permission === "default") {
+  Notification.requestPermission();
+}
+
+// Initial render + loop
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>
