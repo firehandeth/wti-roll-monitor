@@ -464,7 +464,7 @@
 <div class="calc-section">
   <div class="calc-title">
     <span>Entry Calculator — 开仓模拟器</span>
-    <span class="refresh-hint">实时刷新 15s | 平仓目标 4/14 21:30 UTC</span>
+    <span class="refresh-hint">实时刷新 15s | 平仓目标 4/14 7:00 PM ET</span>
   </div>
 
   <!-- Row 1: Prices & Spread -->
@@ -691,8 +691,8 @@ const ROLL_SCHEDULE = [
   { name: "RD5", date: "2026-04-14", wAfter: 0.00 },
 ];
 
-// Close target: RD5 day, 17:30 EDT = 21:30 UTC
-const CLOSE_TARGET = new Date("2026-04-14T21:30:00Z");
+// Close target: RD5 day, 7:00 PM ET = 23:00 UTC
+const CLOSE_TARGET = new Date("2026-04-14T23:00:00Z");
 
 const ALERTS_CFG = [
   { price: 118, dir: "above", msg: "第1档：准备转 $15K 到 HL", level: "warn" },
@@ -945,7 +945,7 @@ function renderCalc(market) {
   // Remaining FR
   const frRemaining = getRemainingFrHours();
   document.getElementById("calcFrCount").textContent = frRemaining.hours + " 次";
-  document.getElementById("calcFrCountSub").textContent = frRemaining.days + "天" + frRemaining.hoursRem + "小时 → 4/14 收盘";
+  document.getElementById("calcFrCountSub").textContent = frRemaining.days + "天" + frRemaining.hoursRem + "小时 → 4/14 7PM ET";
 
   // FR total projected
   const frPerHourDollar = frHourly * oracle;
@@ -1031,9 +1031,9 @@ function renderCalc(market) {
 function render(market, hlPos) {
   // Clocks
   const now = new Date();
-  document.getElementById("clockUTC").textContent = "UTC " + now.toISOString().slice(11, 19);
-  const ctOffset = -5; // CDT in April
-  const ct = new Date(now.getTime() + ctOffset * 3600000);
+  const et = new Date(now.getTime() - 4 * 3600000); // EDT in April
+  document.getElementById("clockUTC").textContent = "ET " + et.toISOString().slice(11, 16);
+  const ct = new Date(now.getTime() - 5 * 3600000); // CDT in April
   document.getElementById("clockCT").textContent = "Houston " + ct.toISOString().slice(11, 16);
   const bj = new Date(now.getTime() + 8 * 3600000);
   document.getElementById("clockBJ").textContent = "Beijing " + bj.toISOString().slice(5, 16).replace("T", " ");
