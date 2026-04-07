@@ -1236,8 +1236,8 @@ function render(market, hlPos) {
   sumPaidFrEl.className = hasHlPos ? pnlClass(frPaid) : "";
 
   const frRemaining = getRemainingFrHours();
-  const hlTotalBbl = hasHlPos ? hlSize : (hoodBbl + ibkrBbl);
-  const frProjected = market.funding * oracle * frRemaining.hours * hlTotalBbl;
+  const cmeTotalBbl = hoodBbl + ibkrBbl; // FR based on CME position size
+  const frProjected = market.funding * oracle * frRemaining.hours * cmeTotalBbl;
   const sumProjFrEl = document.getElementById("sumProjFr");
   sumProjFrEl.textContent = fmtPnl(frProjected) + " (" + frRemaining.hours + "h)";
   sumProjFrEl.className = pnlClass(frProjected);
