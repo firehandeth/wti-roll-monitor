@@ -683,12 +683,13 @@ const DEFAULT_CONFIG = {
 
 let CFG = { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem("wtiCfg") || "{}") };
 
+// Each RD triggers at 5:30 PM ET = 21:30 UTC
 const ROLL_SCHEDULE = [
-  { name: "RD1", date: "2026-04-08", wAfter: 0.80 },
-  { name: "RD2", date: "2026-04-09", wAfter: 0.60 },
-  { name: "RD3", date: "2026-04-10", wAfter: 0.40 },
-  { name: "RD4", date: "2026-04-13", wAfter: 0.20 },
-  { name: "RD5", date: "2026-04-14", wAfter: 0.00 },
+  { name: "RD1", date: "2026-04-08", utc: "2026-04-08T21:30:00Z", wAfter: 0.80 },
+  { name: "RD2", date: "2026-04-09", utc: "2026-04-09T21:30:00Z", wAfter: 0.60 },
+  { name: "RD3", date: "2026-04-10", utc: "2026-04-10T21:30:00Z", wAfter: 0.40 },
+  { name: "RD4", date: "2026-04-13", utc: "2026-04-13T21:30:00Z", wAfter: 0.20 },
+  { name: "RD5", date: "2026-04-14", utc: "2026-04-14T21:30:00Z", wAfter: 0.00 },
 ];
 
 // Close target: RD5 day, 7:00 PM ET = 23:00 UTC
@@ -876,10 +877,9 @@ function calcCmeLiq(entry, balPerBbl) {
 
 function getRollStatus() {
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
   let wF = 1.0, completed = 0, next = null;
   for (const rd of ROLL_SCHEDULE) {
-    if (todayStr > rd.date) { wF = rd.wAfter; completed++; }
+    if (now >= new Date(rd.utc)) { wF = rd.wAfter; completed++; }
     else if (!next) { next = rd; }
   }
   return { wF, wN: 1 - wF, completed, total: 5, progress: completed / 5, next };
@@ -1064,12 +1064,25 @@ function render(market, hlPos) {
   const estProfit = spread * rs.progress * totalBbl;
   document.getElementById("rollProfit").textContent = fmt$(estProfit);
 
-  // Roll day dots
+  // Roll day dots with countdown to next RD
   let daysHtml = "";
-  const todayStr = now.toISOString().slice(0, 10);
+  let nextRd = null;
   for (const rd of ROLL_SCHEDULE) {
-    const cls = todayStr > rd.date ? "done" : todayStr === rd.date ? "active" : "";
-    daysHtml += `<div class="roll-day ${cls}"><div class="dot"></div>${rd.name}<br>${rd.date.slice(5)}</div>`;
+    const rdTime = new Date(rd.utc);
+    const done = now >= rdTime;
+    const cls = done ? "done" : (!nextRd ? "active" : "");
+    if (!done && !nextRd) nextRd = rd;
+    const wPct = ((1 - rd.wAfter) * 100).toFixed(0);
+    daysHtml += `<div class="roll-day ${cls}"><div class="dot"></div>${rd.name}<br>${rd.date.slice(5)} 5:30PM<br><span style="font-size:10px;color:var(--dim);">${wPct}% CLM</span></div>`;
+  }
+  // Countdown to next RD
+  if (nextRd) {
+    const ms = new Date(nextRd.utc) - now;
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    daysHtml += `<div class="roll-day active" style="min-width:100px;"><div class="dot"></div>Next: ${nextRd.name}<br><span style="font-size:16px;font-weight:600;color:var(--yellow);">${h}h ${m}m</span></div>`;
+  } else {
+    daysHtml += `<div class="roll-day done" style="min-width:100px;"><div class="dot"></div>Roll Complete<br><span style="font-size:12px;">100% CLM26</span></div>`;
   }
   document.getElementById("rollDays").innerHTML = daysHtml;
 
