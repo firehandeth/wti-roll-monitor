@@ -545,31 +545,75 @@
     <span>Binance — CLUSDT Perpetual</span>
     <span class="refresh-hint" id="bnStatus">等待数据...</span>
   </div>
-  <div class="grid grid-5" style="margin-bottom:0;">
+
+  <!-- Row 1: Prices & Spread -->
+  <div class="grid grid-4" style="margin-bottom:0;">
     <div class="card">
-      <div class="card-label">Mark Price</div>
-      <div class="card-value" id="bnMark">--</div>
-      <div class="card-sub" id="bnMarkSub">via Binance API</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Index Price</div>
+      <div class="card-label">BN Index (CL Perp)</div>
       <div class="card-value" id="bnIndex">--</div>
-      <div class="card-sub" id="bnBasis">--</div>
+      <div class="card-sub" id="bnIndexSub">via Binance API</div>
     </div>
     <div class="card">
-      <div class="card-label">Funding Rate / 8h</div>
+      <div class="card-label">CLM26 (CME June)</div>
+      <div class="card-value" id="bnClm">--</div>
+      <div class="card-sub">同 Yahoo / 手动值</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Spread (Index − CLM)</div>
+      <div class="card-value" id="bnSpread">--</div>
+      <div class="card-sub" id="bnSpreadPct">--</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Basis (Mark − Index)</div>
+      <div class="card-value" id="bnBasis">--</div>
+      <div class="card-sub" id="bnBasisPct">--</div>
+    </div>
+  </div>
+
+  <!-- Row 2: FR & Costs -->
+  <div class="grid grid-4" style="margin-bottom:0;">
+    <div class="card">
+      <div class="card-label">当前 FR / 8h</div>
       <div class="card-value" id="bnFr">--</div>
-      <div class="card-sub" id="bnFrSub">--</div>
+      <div class="card-sub" id="bnFrDollar">--</div>
     </div>
     <div class="card">
-      <div class="card-label">24h Change</div>
-      <div class="card-value" id="bnChange">--</div>
-      <div class="card-sub" id="bnVolume">--</div>
+      <div class="card-label">剩余 FR 次数 (至 4/14)</div>
+      <div class="card-value" id="bnFrCount">--</div>
+      <div class="card-sub" id="bnFrCountSub">--</div>
     </div>
     <div class="card">
-      <div class="card-label">Open Interest</div>
-      <div class="card-value" id="bnOi">--</div>
-      <div class="card-sub" id="bnOiSub">--</div>
+      <div class="card-label">FR 总成本 (按当前恒定)</div>
+      <div class="card-value" id="bnFrTotal">--</div>
+      <div class="card-sub" id="bnFrTotalSub">每桶累计支付</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Mark Price / OI</div>
+      <div class="card-value" id="bnMark">--</div>
+      <div class="card-sub" id="bnOi">--</div>
+    </div>
+  </div>
+
+  <!-- PnL Breakdown -->
+  <div class="pnl-grid">
+    <div>
+      <table class="pnl-table">
+        <tr><th colspan="2" style="color:#fff; font-size:13px;">PnL 分解 (每桶)</th></tr>
+        <tr><td>S₀ 价差收益</td><td id="bnPnlS0">--</td></tr>
+        <tr><td>−Δb 基差成本</td><td id="bnPnlBasis">--</td></tr>
+        <tr><td>FR 资金费 (projected)</td><td id="bnPnlFr">--</td></tr>
+        <tr class="highlight"><td>Net PnL / barrel</td><td id="bnPnlNet">--</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="pnl-table">
+        <tr><th colspan="2" style="color:#fff; font-size:13px;">总利润估算</th></tr>
+        <tr><td>每张 MCL (100 bbl)</td><td id="bnPnlMcl">--</td></tr>
+        <tr><td>50 MCL (5,000 bbl)</td><td id="bnPnl50">--</td></tr>
+        <tr><td>100 MCL (10,000 bbl)</td><td id="bnPnl100">--</td></tr>
+        <tr class="highlight"><td>ROI (100 MCL / 2×资金)</td><td id="bnPnlRoi">--</td></tr>
+        <tr class="highlight"><td>年化收益率</td><td id="bnPnlAnnual">--</td></tr>
+      </table>
     </div>
   </div>
 </div>
@@ -876,6 +920,8 @@ async function fetchBinanceCL() {
   }
 }
 
+let prevBnIndex = null;
+
 function renderBinance(bn) {
   const statusEl = document.getElementById("bnStatus");
   if (!bn) {
@@ -886,31 +932,111 @@ function renderBinance(bn) {
   statusEl.textContent = "实时数据";
   statusEl.style.color = "var(--green)";
 
-  document.getElementById("bnMark").textContent = fmt$(bn.mark, 2);
-  document.getElementById("bnMarkSub").textContent = "Last: " + fmt$(bn.price, 2);
+  const index = bn.index;
+  const mark = bn.mark;
+  const clm = CFG.clmPrice;
 
-  document.getElementById("bnIndex").textContent = fmt$(bn.index, 2);
-  const bnBasis = bn.mark - bn.index;
-  const bnBasisEl = document.getElementById("bnBasis");
-  bnBasisEl.textContent = "Basis: " + fmtSign$(bnBasis, 3);
-  bnBasisEl.style.color = Math.abs(bnBasis) < 0.5 ? "var(--green)" : "var(--yellow)";
+  // --- Prices & Spread ---
+  document.getElementById("bnIndex").textContent = fmt$(index, 2);
+  const idxChange = prevBnIndex ? index - prevBnIndex : 0;
+  document.getElementById("bnIndexSub").innerHTML = prevBnIndex
+    ? `<span class="${idxChange >= 0 ? 'positive' : 'negative'}">${idxChange >= 0 ? '▲' : '▼'} $${Math.abs(idxChange).toFixed(2)}</span>`
+    : "via Binance API";
 
-  const frPct = bn.fr * 100;
-  const bnFrEl = document.getElementById("bnFr");
-  bnFrEl.textContent = frPct.toFixed(4) + "%";
-  bnFrEl.className = "card-value " + (bn.fr >= 0 ? "positive" : bn.fr > -0.001 ? "warning" : "negative");
+  document.getElementById("bnClm").textContent = fmt$(clm, 2);
+
+  const spread = index - clm;
+  const spreadPct = clm > 0 ? (spread / clm * 100) : 0;
+  const spreadEl = document.getElementById("bnSpread");
+  spreadEl.textContent = fmtSign$(spread);
+  spreadEl.className = "card-value " + pnlClass(spread);
+  document.getElementById("bnSpreadPct").textContent = fmtPct(spreadPct);
+
+  const basis = mark - index;
+  const basisPct = index > 0 ? (basis / index * 100) : 0;
+  const basisEl = document.getElementById("bnBasis");
+  basisEl.textContent = "$" + basis.toFixed(3);
+  basisEl.className = "card-value " + (Math.abs(basis) < 0.5 ? "positive" : Math.abs(basis) < 1.5 ? "warning" : "negative");
+  document.getElementById("bnBasisPct").textContent = basisPct.toFixed(3) + "% | " + (Math.abs(basis) < 0.5 ? "正常" : Math.abs(basis) < 1.5 ? "关注" : "异常");
+
+  // --- FR --- (Binance FR is per 8h, not per hour)
+  const fr8h = bn.fr; // already per 8h
+  const fr8hPct = fr8h * 100;
+  const fr8hDollar = fr8h * index;
+  const frEl = document.getElementById("bnFr");
+  frEl.textContent = fr8hPct.toFixed(4) + "%";
+  frEl.className = "card-value " + (fr8h >= 0 ? "positive" : fr8h > -0.001 ? "warning" : "negative");
   const nextMs = bn.nextFundingTime - Date.now();
   const nextH = Math.floor(nextMs / 3600000);
   const nextM = Math.floor((nextMs % 3600000) / 60000);
-  document.getElementById("bnFrSub").textContent = (bn.fr >= 0 ? "空头收取" : "空头支付") + " | Next: " + nextH + "h" + nextM + "m";
+  document.getElementById("bnFrDollar").textContent = fmtSign$(fr8hDollar) + "/bbl/8h | " + (fr8h >= 0 ? "空头收取" : "空头支付") + " | Next:" + nextH + "h" + nextM + "m";
 
-  const changeEl = document.getElementById("bnChange");
-  changeEl.textContent = (bn.change >= 0 ? "+" : "") + bn.change.toFixed(2) + "%";
-  changeEl.className = "card-value " + pnlClass(bn.change);
-  document.getElementById("bnVolume").textContent = "Vol: $" + (bn.volume / 1e6).toFixed(1) + "M | H/L: " + fmt$(bn.high, 2) + "/" + fmt$(bn.low, 2);
+  // Remaining FR (Binance settles every 8h = 3 times/day)
+  const frRemaining = getRemainingFrHours();
+  const frSettlements = Math.floor(frRemaining.hours / 8);
+  document.getElementById("bnFrCount").textContent = frSettlements + " 次 (每8h)";
+  document.getElementById("bnFrCountSub").textContent = frRemaining.days + "天" + frRemaining.hoursRem + "小时 → 4/14 7PM ET";
 
-  document.getElementById("bnOi").textContent = bn.oi.toLocaleString() + " bbl";
-  document.getElementById("bnOiSub").textContent = "≈ " + fmt$(bn.oi * bn.mark / 1e6, 1) + "M notional";
+  // FR total: per-barrel cost projected
+  const frPerHourDollar = fr8h * index / 8; // convert 8h rate to hourly dollar
+  const frTotalDollar = frPerHourDollar * frRemaining.hours;
+  const frTotalEl = document.getElementById("bnFrTotal");
+  frTotalEl.textContent = fmtSign$(frTotalDollar) + "/bbl";
+  frTotalEl.className = "card-value " + pnlClass(frTotalDollar);
+  document.getElementById("bnFrTotalSub").textContent = "= " + frSettlements + " × " + fmtSign$(fr8hDollar, 4) + "/8h";
+
+  // Mark & OI
+  document.getElementById("bnMark").textContent = fmt$(mark, 2);
+  document.getElementById("bnOi").textContent = bn.oi.toLocaleString() + " bbl ($" + (bn.oi * mark / 1e6).toFixed(1) + "M)";
+
+  // --- PnL Breakdown (per barrel) ---
+  const s0 = spread;
+  const basisCost = basis;
+  const frCost = frTotalDollar;
+  const netPnlBbl = s0 + basisCost + frCost;
+
+  const s0El = document.getElementById("bnPnlS0");
+  s0El.textContent = fmtSign$(s0) + "/bbl";
+  s0El.className = pnlClass(s0);
+
+  const basisCostEl = document.getElementById("bnPnlBasis");
+  basisCostEl.textContent = fmtSign$(basisCost) + "/bbl";
+  basisCostEl.className = pnlClass(basisCost);
+
+  const frCostEl = document.getElementById("bnPnlFr");
+  frCostEl.textContent = fmtSign$(frCost) + "/bbl";
+  frCostEl.className = pnlClass(frCost);
+
+  const netEl = document.getElementById("bnPnlNet");
+  netEl.textContent = fmtSign$(netPnlBbl) + "/bbl";
+  netEl.className = pnlClass(netPnlBbl);
+
+  // --- Profit estimates (fixed capital same as HL) ---
+  const totalCap = 366500; // same fixed capital
+  const pnlMcl = netPnlBbl * 100;
+  const pnl50 = netPnlBbl * 5000;
+  const pnl100 = netPnlBbl * 10000;
+  const totalCap2x = totalCap * 2;
+  const roi = totalCap2x > 0 ? (pnl100 / totalCap2x * 100) : 0;
+
+  document.getElementById("bnPnlMcl").textContent = fmtSign$(pnlMcl, 0);
+  document.getElementById("bnPnlMcl").className = pnlClass(pnlMcl);
+  document.getElementById("bnPnl50").textContent = fmtSign$(pnl50, 0);
+  document.getElementById("bnPnl50").className = pnlClass(pnl50);
+  document.getElementById("bnPnl100").textContent = fmtSign$(pnl100, 0);
+  document.getElementById("bnPnl100").className = pnlClass(pnl100);
+
+  const roiEl = document.getElementById("bnPnlRoi");
+  roiEl.textContent = fmtPct(roi) + " (" + fmtSign$(pnl100, 0) + " / " + fmt$(totalCap2x, 0) + ")";
+  roiEl.className = pnlClass(roi);
+
+  const holdingDays = frRemaining.hours / 24;
+  const annualized = holdingDays > 0 ? (roi / holdingDays * 365) : 0;
+  const annualEl = document.getElementById("bnPnlAnnual");
+  annualEl.textContent = fmtPct(annualized) + " (" + holdingDays.toFixed(1) + "天持仓)";
+  annualEl.className = pnlClass(annualized);
+
+  prevBnIndex = index;
 }
 
 async function fetchCLM26() {
