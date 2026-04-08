@@ -594,11 +594,11 @@
     </div>
   </div>
 
-  <!-- PnL Breakdown -->
-  <div class="pnl-grid">
+  <!-- PnL Breakdown: Full + Friday -->
+  <div class="pnl-grid" style="grid-template-columns: 1fr 1fr 1fr;">
     <div>
       <table class="pnl-table">
-        <tr><th colspan="2" style="color:#fff; font-size:13px;">PnL 分解 (每桶)</th></tr>
+        <tr><th colspan="2" style="color:#fff; font-size:13px;">PnL 分解 (每桶) — 持有到 4/14</th></tr>
         <tr><td>S₀ 价差收益</td><td id="bnPnlS0">--</td></tr>
         <tr><td>−Δb 基差成本</td><td id="bnPnlBasis">--</td></tr>
         <tr><td>FR 资金费 (projected)</td><td id="bnPnlFr">--</td></tr>
@@ -607,12 +607,24 @@
     </div>
     <div>
       <table class="pnl-table">
+        <tr><th colspan="2" style="color:var(--yellow); font-size:13px;">PnL 分解 (每桶) — 周五 RD3 平仓</th></tr>
+        <tr><td>S₀ × 60% 价差</td><td id="bnFriS0">--</td></tr>
+        <tr><td>−Δb 基差成本</td><td id="bnFriBasis">--</td></tr>
+        <tr><td>FR 资金费 (至周五)</td><td id="bnFriFr">--</td></tr>
+        <tr class="highlight"><td>Net PnL / barrel</td><td id="bnFriNet">--</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="pnl-table">
         <tr><th colspan="2" style="color:#fff; font-size:13px;">总利润估算</th></tr>
-        <tr><td>每张 MCL (100 bbl)</td><td id="bnPnlMcl">--</td></tr>
-        <tr><td>50 MCL (5,000 bbl)</td><td id="bnPnl50">--</td></tr>
-        <tr><td>100 MCL (10,000 bbl)</td><td id="bnPnl100">--</td></tr>
-        <tr class="highlight"><td>ROI (100 MCL / 2×资金)</td><td id="bnPnlRoi">--</td></tr>
-        <tr class="highlight"><td>年化收益率</td><td id="bnPnlAnnual">--</td></tr>
+        <tr><td>持有到 4/14</td><td></td></tr>
+        <tr><td>&nbsp;&nbsp;100 MCL</td><td id="bnPnl100">--</td></tr>
+        <tr><td>&nbsp;&nbsp;ROI</td><td id="bnPnlRoi">--</td></tr>
+        <tr><td>&nbsp;&nbsp;年化</td><td id="bnPnlAnnual">--</td></tr>
+        <tr><td style="color:var(--yellow);">周五 RD3 平仓</td><td></td></tr>
+        <tr><td>&nbsp;&nbsp;100 MCL</td><td id="bnFri100">--</td></tr>
+        <tr><td>&nbsp;&nbsp;ROI</td><td id="bnFriRoi">--</td></tr>
+        <tr class="highlight"><td>&nbsp;&nbsp;年化</td><td id="bnFriAnnual">--</td></tr>
       </table>
     </div>
   </div>
@@ -1011,30 +1023,60 @@ function renderBinance(bn) {
   netEl.textContent = fmtSign$(netPnlBbl) + "/bbl";
   netEl.className = pnlClass(netPnlBbl);
 
-  // --- Profit estimates (fixed capital same as HL) ---
-  const totalCap = 366500; // same fixed capital
-  const pnlMcl = netPnlBbl * 100;
-  const pnl50 = netPnlBbl * 5000;
-  const pnl100 = netPnlBbl * 10000;
+  // --- Friday RD3 scenario (close at 4/10 5:30 PM ET, 60% roll done) ---
+  const RD3_TIME = new Date("2026-04-10T21:30:00Z");
+  const now = new Date();
+  const friHoursLeft = Math.max(0, (RD3_TIME - now) / 3600000);
+  const friSpread = spread * 0.6; // 60% of current spread captured
+  const friFrTotal = frPerHourDollar * friHoursLeft;
+  const friNet = friSpread + basisCost + friFrTotal;
+
+  const friS0El = document.getElementById("bnFriS0");
+  friS0El.textContent = fmtSign$(friSpread) + "/bbl";
+  friS0El.className = pnlClass(friSpread);
+  const friBasisEl = document.getElementById("bnFriBasis");
+  friBasisEl.textContent = fmtSign$(basisCost) + "/bbl";
+  friBasisEl.className = pnlClass(basisCost);
+  const friFrEl = document.getElementById("bnFriFr");
+  friFrEl.textContent = fmtSign$(friFrTotal) + "/bbl (" + friHoursLeft.toFixed(0) + "h)";
+  friFrEl.className = pnlClass(friFrTotal);
+  const friNetEl = document.getElementById("bnFriNet");
+  friNetEl.textContent = fmtSign$(friNet) + "/bbl";
+  friNetEl.className = pnlClass(friNet);
+
+  // --- Profit estimates ---
+  const totalCap = 366500;
   const totalCap2x = totalCap * 2;
+
+  // Full (4/14)
+  const pnl100 = netPnlBbl * 10000;
   const roi = totalCap2x > 0 ? (pnl100 / totalCap2x * 100) : 0;
-
-  document.getElementById("bnPnlMcl").textContent = fmtSign$(pnlMcl, 0);
-  document.getElementById("bnPnlMcl").className = pnlClass(pnlMcl);
-  document.getElementById("bnPnl50").textContent = fmtSign$(pnl50, 0);
-  document.getElementById("bnPnl50").className = pnlClass(pnl50);
-  document.getElementById("bnPnl100").textContent = fmtSign$(pnl100, 0);
-  document.getElementById("bnPnl100").className = pnlClass(pnl100);
-
-  const roiEl = document.getElementById("bnPnlRoi");
-  roiEl.textContent = fmtPct(roi) + " (" + fmtSign$(pnl100, 0) + " / " + fmt$(totalCap2x, 0) + ")";
-  roiEl.className = pnlClass(roi);
-
   const holdingDays = frRemaining.hours / 24;
   const annualized = holdingDays > 0 ? (roi / holdingDays * 365) : 0;
+
+  document.getElementById("bnPnl100").textContent = fmtSign$(pnl100, 0);
+  document.getElementById("bnPnl100").className = pnlClass(pnl100);
+  const roiEl = document.getElementById("bnPnlRoi");
+  roiEl.textContent = fmtPct(roi);
+  roiEl.className = pnlClass(roi);
   const annualEl = document.getElementById("bnPnlAnnual");
-  annualEl.textContent = fmtPct(annualized) + " (" + holdingDays.toFixed(1) + "天持仓)";
+  annualEl.textContent = fmtPct(annualized);
   annualEl.className = pnlClass(annualized);
+
+  // Friday RD3
+  const friPnl100 = friNet * 10000;
+  const friRoi = totalCap2x > 0 ? (friPnl100 / totalCap2x * 100) : 0;
+  const friDays = friHoursLeft / 24;
+  const friAnnual = friDays > 0 ? (friRoi / friDays * 365) : 0;
+
+  document.getElementById("bnFri100").textContent = fmtSign$(friPnl100, 0);
+  document.getElementById("bnFri100").className = pnlClass(friPnl100);
+  const friRoiEl = document.getElementById("bnFriRoi");
+  friRoiEl.textContent = fmtPct(friRoi);
+  friRoiEl.className = pnlClass(friRoi);
+  const friAnnualEl = document.getElementById("bnFriAnnual");
+  friAnnualEl.textContent = fmtPct(friAnnual) + " (" + friDays.toFixed(1) + "天)";
+  friAnnualEl.className = pnlClass(friAnnual);
 
   prevBnIndex = index;
 }
