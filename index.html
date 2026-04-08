@@ -573,7 +573,7 @@
   <!-- Row 2: FR & Costs -->
   <div class="grid grid-4" style="margin-bottom:0;">
     <div class="card">
-      <div class="card-label">当前 FR / 8h</div>
+      <div class="card-label">当前 FR / 4h</div>
       <div class="card-value" id="bnFr">--</div>
       <div class="card-sub" id="bnFrDollar">--</div>
     </div>
@@ -959,31 +959,31 @@ function renderBinance(bn) {
   basisEl.className = "card-value " + (Math.abs(basis) < 0.5 ? "positive" : Math.abs(basis) < 1.5 ? "warning" : "negative");
   document.getElementById("bnBasisPct").textContent = basisPct.toFixed(3) + "% | " + (Math.abs(basis) < 0.5 ? "正常" : Math.abs(basis) < 1.5 ? "关注" : "异常");
 
-  // --- FR --- (Binance FR is per 8h, not per hour)
-  const fr8h = bn.fr; // already per 8h
-  const fr8hPct = fr8h * 100;
-  const fr8hDollar = fr8h * index;
+  // --- FR --- (Binance CLUSDT settles every 4h, API returns per-settlement rate)
+  const fr4h = bn.fr; // per 4h settlement
+  const fr4hPct = fr4h * 100;
+  const fr4hDollar = fr4h * index;
   const frEl = document.getElementById("bnFr");
-  frEl.textContent = fr8hPct.toFixed(4) + "%";
-  frEl.className = "card-value " + (fr8h >= 0 ? "positive" : fr8h > -0.001 ? "warning" : "negative");
+  frEl.textContent = fr4hPct.toFixed(4) + "% /4h";
+  frEl.className = "card-value " + (fr4h >= 0 ? "positive" : fr4h > -0.001 ? "warning" : "negative");
   const nextMs = bn.nextFundingTime - Date.now();
   const nextH = Math.floor(nextMs / 3600000);
   const nextM = Math.floor((nextMs % 3600000) / 60000);
-  document.getElementById("bnFrDollar").textContent = fmtSign$(fr8hDollar) + "/bbl/8h | " + (fr8h >= 0 ? "空头收取" : "空头支付") + " | Next:" + nextH + "h" + nextM + "m";
+  document.getElementById("bnFrDollar").textContent = fmtSign$(fr4hDollar) + "/bbl/4h | " + (fr4h >= 0 ? "空头收取" : "空头支付") + " | Next:" + nextH + "h" + nextM + "m";
 
-  // Remaining FR (Binance settles every 8h = 3 times/day)
+  // Remaining FR (Binance settles every 4h = 6 times/day)
   const frRemaining = getRemainingFrHours();
-  const frSettlements = Math.floor(frRemaining.hours / 8);
-  document.getElementById("bnFrCount").textContent = frSettlements + " 次 (每8h)";
+  const frSettlements = Math.floor(frRemaining.hours / 4);
+  document.getElementById("bnFrCount").textContent = frSettlements + " 次 (每4h)";
   document.getElementById("bnFrCountSub").textContent = frRemaining.days + "天" + frRemaining.hoursRem + "小时 → 4/14 7PM ET";
 
   // FR total: per-barrel cost projected
-  const frPerHourDollar = fr8h * index / 8; // convert 8h rate to hourly dollar
+  const frPerHourDollar = fr4h * index / 4; // convert 4h rate to hourly dollar
   const frTotalDollar = frPerHourDollar * frRemaining.hours;
   const frTotalEl = document.getElementById("bnFrTotal");
   frTotalEl.textContent = fmtSign$(frTotalDollar) + "/bbl";
   frTotalEl.className = "card-value " + pnlClass(frTotalDollar);
-  document.getElementById("bnFrTotalSub").textContent = "= " + frSettlements + " × " + fmtSign$(fr8hDollar, 4) + "/8h";
+  document.getElementById("bnFrTotalSub").textContent = "= " + frSettlements + " × " + fmtSign$(fr4hDollar, 4) + "/4h";
 
   // Mark & OI
   document.getElementById("bnMark").textContent = fmt$(mark, 2);
