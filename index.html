@@ -797,6 +797,7 @@ const ALERTS_CFG = [
 let prevOracle = null;
 let clmLocked = false; // true = manual mode, skip Yahoo auto-refresh
 let lastMarket = null;
+let lastBnData = null;
 let hlApiPos = null;
 
 // ============================================================
@@ -870,7 +871,10 @@ function onClmChange() {
     if (!clmLocked) { clmLocked = true; updateClmLockUI(); } // auto-lock on manual input
     CFG.clmPrice = val;
     localStorage.setItem("wtiCfg", JSON.stringify(CFG));
-    if (lastMarket) renderCalc(lastMarket);
+    if (lastMarket) {
+      renderCalc(lastMarket);
+      if (lastBnData) renderBinance(lastBnData);
+    }
   }
 }
 
@@ -1564,6 +1568,7 @@ async function refresh() {
   lastMarket = market;
 
   // Render Binance panel
+  lastBnData = bnData;
   renderBinance(bnData);
 
   // Update CLM26 price if fetched successfully (only when not locked)
