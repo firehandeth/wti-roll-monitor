@@ -1859,14 +1859,10 @@ async function refresh() {
   else fetches.push(Promise.resolve(null));
   const [market, bnData, bzData, clmPrice, brnPrice] = await Promise.all(fetches);
   lastMarket = market;
-
-  // Render Binance panels
   lastBnData = bnData;
   lastBzData = bzData;
-  renderBinance(bnData);
-  renderBrent(bzData);
 
-  // Update CLM26 price if fetched successfully (only when not locked)
+  // Update CLM26 price BEFORE rendering (panels depend on CFG.clmPrice)
   if (!clmLocked && clmPrice) {
     CFG.clmPrice = clmPrice;
     document.getElementById("clmInput").value = clmPrice.toFixed(2);
@@ -1877,7 +1873,7 @@ async function refresh() {
     document.getElementById("clmSource").style.color = "var(--red)";
   }
 
-  // Update BRN price if fetched successfully (only when not locked)
+  // Update BRN price BEFORE rendering (panels depend on CFG.brnPrice)
   if (!brnLocked && brnPrice) {
     CFG.brnPrice = brnPrice;
     document.getElementById("brnInput").value = brnPrice.toFixed(2);
@@ -1887,6 +1883,10 @@ async function refresh() {
     document.getElementById("brnSource").textContent = "获取失败 — 请手动输入";
     document.getElementById("brnSource").style.color = "var(--red)";
   }
+
+  // Render Binance panels (after prices updated)
+  renderBinance(bnData);
+  renderBrent(bzData);
 
   let hlPos = null;
   if (CFG.wallet) {
