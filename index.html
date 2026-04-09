@@ -643,12 +643,12 @@
       <div class="card-sub" id="bzIndexSub">via Binance API</div>
     </div>
     <div class="card">
-      <div class="card-label">BRN (Brent Futures)</div>
+      <div class="card-label">BRNN26 (Brent Jul26)</div>
       <div class="card-value" style="display:flex;align-items:center;gap:4px;">$<input type="number" class="clm-input" id="brnInput" step="0.01" onchange="onBrnChange()" onkeyup="onBrnChange()"><button id="brnLockBtn" onclick="toggleBrnLock()" style="background:none;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">AUTO</button></div>
       <div class="card-sub" id="brnSource">等待 Yahoo 数据...</div>
     </div>
     <div class="card">
-      <div class="card-label">Spread (Index − BRN)</div>
+      <div class="card-label">Spread (Index − BRNN26)</div>
       <div class="card-value" id="bzSpread">--</div>
       <div class="card-sub" id="bzSpreadPct">--</div>
     </div>
@@ -1382,7 +1382,7 @@ async function fetchBRN() {
     (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
     (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
   ];
-  const url = "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=1d&range=1d";
+  const url = "https://query1.finance.yahoo.com/v8/finance/chart/BZN26.NYM?interval=1d&range=1d";
   for (const proxy of proxies) {
     try {
       const resp = await fetch(proxy(url), { signal: AbortSignal.timeout(5000) });
@@ -1881,7 +1881,7 @@ async function refresh() {
   if (!brnLocked && brnPrice) {
     CFG.brnPrice = brnPrice;
     document.getElementById("brnInput").value = brnPrice.toFixed(2);
-    document.getElementById("brnSource").textContent = "via Yahoo Finance (BZ=F) — 自动刷新";
+    document.getElementById("brnSource").textContent = "via Yahoo Finance (BZN26.NYM) — 自动刷新";
     document.getElementById("brnSource").style.color = "var(--green)";
   } else if (!brnLocked && !brnPrice && !CFG.brnPrice) {
     document.getElementById("brnSource").textContent = "获取失败 — 请手动输入";
