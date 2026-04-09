@@ -630,6 +630,91 @@
   </div>
 </div>
 
+<!-- Binance BZUSDT (Brent) Panel -->
+<div class="calc-section" style="margin-top:12px;">
+  <div class="calc-title">
+    <span>Binance — BZUSDT (Brent) Perpetual</span>
+    <span class="refresh-hint" id="bzStatus">等待数据...</span>
+  </div>
+  <div class="grid grid-4" style="margin-bottom:0;">
+    <div class="card">
+      <div class="card-label">BN Index (BZ Perp)</div>
+      <div class="card-value" id="bzIndex">--</div>
+      <div class="card-sub" id="bzIndexSub">via Binance API</div>
+    </div>
+    <div class="card">
+      <div class="card-label">CLM26 (CME June)</div>
+      <div class="card-value" id="bzClm">--</div>
+      <div class="card-sub">同 Yahoo / 手动值</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Spread (Index − CLM)</div>
+      <div class="card-value" id="bzSpread">--</div>
+      <div class="card-sub" id="bzSpreadPct">--</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Basis (Mark − Index)</div>
+      <div class="card-value" id="bzBasis">--</div>
+      <div class="card-sub" id="bzBasisPct">--</div>
+    </div>
+  </div>
+  <div class="grid grid-4" style="margin-bottom:0;">
+    <div class="card">
+      <div class="card-label">当前 FR / 4h</div>
+      <div class="card-value" id="bzFr">--</div>
+      <div class="card-sub" id="bzFrDollar">--</div>
+    </div>
+    <div class="card">
+      <div class="card-label">剩余 FR 次数 (至 4/14)</div>
+      <div class="card-value" id="bzFrCount">--</div>
+      <div class="card-sub" id="bzFrCountSub">--</div>
+    </div>
+    <div class="card">
+      <div class="card-label">FR 总成本 (按当前恒定)</div>
+      <div class="card-value" id="bzFrTotal">--</div>
+      <div class="card-sub" id="bzFrTotalSub">每桶累计支付</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Mark Price / OI</div>
+      <div class="card-value" id="bzMark">--</div>
+      <div class="card-sub" id="bzOi">--</div>
+    </div>
+  </div>
+  <div class="pnl-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+    <div>
+      <table class="pnl-table">
+        <tr><th colspan="2" style="color:#fff; font-size:13px;">PnL 分解 (每桶) — 持有到 4/14</th></tr>
+        <tr><td>S₀ 价差收益</td><td id="bzPnlS0">--</td></tr>
+        <tr><td>−Δb 基差成本</td><td id="bzPnlBasis">--</td></tr>
+        <tr><td>FR 资金费 (projected)</td><td id="bzPnlFr">--</td></tr>
+        <tr class="highlight"><td>Net PnL / barrel</td><td id="bzPnlNet">--</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="pnl-table">
+        <tr><th colspan="2" style="color:var(--yellow); font-size:13px;">PnL 分解 (每桶) — 周五 RD3 平仓</th></tr>
+        <tr><td>S₀ × 60% 价差</td><td id="bzFriS0">--</td></tr>
+        <tr><td>−Δb 基差成本</td><td id="bzFriBasis">--</td></tr>
+        <tr><td>FR 资金费 (至周五)</td><td id="bzFriFr">--</td></tr>
+        <tr class="highlight"><td>Net PnL / barrel</td><td id="bzFriNet">--</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="pnl-table">
+        <tr><th colspan="2" style="color:#fff; font-size:13px;">总利润估算</th></tr>
+        <tr><td>持有到 4/14</td><td></td></tr>
+        <tr><td>&nbsp;&nbsp;100 MCL</td><td id="bzPnl100">--</td></tr>
+        <tr><td>&nbsp;&nbsp;ROI</td><td id="bzPnlRoi">--</td></tr>
+        <tr><td>&nbsp;&nbsp;年化</td><td id="bzPnlAnnual">--</td></tr>
+        <tr><td style="color:var(--yellow);">周五 RD3 平仓</td><td></td></tr>
+        <tr><td>&nbsp;&nbsp;100 MCL</td><td id="bzFri100">--</td></tr>
+        <tr><td>&nbsp;&nbsp;ROI</td><td id="bzFriRoi">--</td></tr>
+        <tr class="highlight"><td>&nbsp;&nbsp;年化</td><td id="bzFriAnnual">--</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- Market Data Row (existing, kept for monitoring detail) -->
 <div class="grid grid-5" id="marketRow" style="display:none;">
   <div class="card">
@@ -798,6 +883,7 @@ let prevOracle = null;
 let clmLocked = false; // true = manual mode, skip Yahoo auto-refresh
 let lastMarket = null;
 let lastBnData = null;
+let lastBzData = null;
 let hlApiPos = null;
 
 // ============================================================
@@ -874,6 +960,7 @@ function onClmChange() {
     if (lastMarket) {
       renderCalc(lastMarket);
       if (lastBnData) renderBinance(lastBnData);
+      if (lastBzData) renderBrent(lastBzData);
     }
   }
 }
@@ -1083,6 +1170,160 @@ function renderBinance(bn) {
   friAnnualEl.className = pnlClass(friAnnual);
 
   prevBnIndex = index;
+}
+
+// ============================================================
+// Binance BZUSDT (Brent)
+// ============================================================
+async function fetchBinanceBZ() {
+  try {
+    const [premResp, tickerResp, oiResp] = await Promise.all([
+      fetch("https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BZUSDT", { signal: AbortSignal.timeout(5000) }),
+      fetch("https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BZUSDT", { signal: AbortSignal.timeout(5000) }),
+      fetch("https://fapi.binance.com/fapi/v1/openInterest?symbol=BZUSDT", { signal: AbortSignal.timeout(5000) }),
+    ]);
+    const [prem, ticker, oi] = await Promise.all([premResp.json(), tickerResp.json(), oiResp.json()]);
+    if (prem.code || ticker.code) return null;
+    return {
+      mark: parseFloat(prem.markPrice),
+      index: parseFloat(prem.indexPrice),
+      fr: parseFloat(prem.lastFundingRate),
+      nextFundingTime: prem.nextFundingTime,
+      price: parseFloat(ticker.lastPrice),
+      oi: parseFloat(oi.openInterest),
+    };
+  } catch (e) {
+    console.warn("Binance BZ fetch error:", e);
+    return null;
+  }
+}
+
+let prevBzIndex = null;
+
+function renderBrent(bz) {
+  const statusEl = document.getElementById("bzStatus");
+  if (!bz) {
+    statusEl.textContent = "API 不可用（可能地区限制）";
+    statusEl.style.color = "var(--red)";
+    return;
+  }
+  statusEl.textContent = "实时数据";
+  statusEl.style.color = "var(--green)";
+
+  const index = bz.index;
+  const mark = bz.mark;
+  const clm = CFG.clmPrice;
+
+  // Prices & Spread
+  document.getElementById("bzIndex").textContent = fmt$(index, 2);
+  const idxChange = prevBzIndex ? index - prevBzIndex : 0;
+  document.getElementById("bzIndexSub").innerHTML = prevBzIndex
+    ? `<span class="${idxChange >= 0 ? 'positive' : 'negative'}">${idxChange >= 0 ? '▲' : '▼'} $${Math.abs(idxChange).toFixed(2)}</span>`
+    : "via Binance API";
+  document.getElementById("bzClm").textContent = fmt$(clm, 2);
+
+  const spread = index - clm;
+  const spreadPct = clm > 0 ? (spread / clm * 100) : 0;
+  const spreadEl = document.getElementById("bzSpread");
+  spreadEl.textContent = fmtSign$(spread);
+  spreadEl.className = "card-value " + pnlClass(spread);
+  document.getElementById("bzSpreadPct").textContent = fmtPct(spreadPct);
+
+  const basis = mark - index;
+  const basisPct = index > 0 ? (basis / index * 100) : 0;
+  const basisEl = document.getElementById("bzBasis");
+  basisEl.textContent = "$" + basis.toFixed(3);
+  basisEl.className = "card-value " + (Math.abs(basis) < 0.5 ? "positive" : Math.abs(basis) < 1.5 ? "warning" : "negative");
+  document.getElementById("bzBasisPct").textContent = basisPct.toFixed(3) + "% | " + (Math.abs(basis) < 0.5 ? "正常" : Math.abs(basis) < 1.5 ? "关注" : "异常");
+
+  // FR (4h settlement)
+  const fr4h = bz.fr;
+  const fr4hPct = fr4h * 100;
+  const fr4hDollar = fr4h * index;
+  const frEl = document.getElementById("bzFr");
+  frEl.textContent = fr4hPct.toFixed(4) + "% /4h";
+  frEl.className = "card-value " + (fr4h >= 0 ? "positive" : fr4h > -0.001 ? "warning" : "negative");
+  const nextMs = bz.nextFundingTime - Date.now();
+  const nextH = Math.floor(nextMs / 3600000);
+  const nextM = Math.floor((nextMs % 3600000) / 60000);
+  document.getElementById("bzFrDollar").textContent = fmtSign$(fr4hDollar) + "/bbl/4h | " + (fr4h >= 0 ? "空头收取" : "空头支付") + " | Next:" + nextH + "h" + nextM + "m";
+
+  const frRemaining = getRemainingFrHours();
+  const frSettlements = Math.floor(frRemaining.hours / 4);
+  document.getElementById("bzFrCount").textContent = frSettlements + " 次 (每4h)";
+  document.getElementById("bzFrCountSub").textContent = frRemaining.days + "天" + frRemaining.hoursRem + "小时 → 4/14 7PM ET";
+
+  const frPerHourDollar = fr4h * index / 4;
+  const frTotalDollar = frPerHourDollar * frRemaining.hours;
+  const frTotalEl = document.getElementById("bzFrTotal");
+  frTotalEl.textContent = fmtSign$(frTotalDollar) + "/bbl";
+  frTotalEl.className = "card-value " + pnlClass(frTotalDollar);
+  document.getElementById("bzFrTotalSub").textContent = "= " + frSettlements + " × " + fmtSign$(fr4hDollar, 4) + "/4h";
+
+  document.getElementById("bzMark").textContent = fmt$(mark, 2);
+  document.getElementById("bzOi").textContent = bz.oi.toLocaleString() + " bbl ($" + (bz.oi * mark / 1e6).toFixed(1) + "M)";
+
+  // PnL (full)
+  const s0 = spread;
+  const basisCost = basis;
+  const frCost = frTotalDollar;
+  const netPnlBbl = s0 + basisCost + frCost;
+
+  document.getElementById("bzPnlS0").textContent = fmtSign$(s0) + "/bbl";
+  document.getElementById("bzPnlS0").className = pnlClass(s0);
+  document.getElementById("bzPnlBasis").textContent = fmtSign$(basisCost) + "/bbl";
+  document.getElementById("bzPnlBasis").className = pnlClass(basisCost);
+  document.getElementById("bzPnlFr").textContent = fmtSign$(frCost) + "/bbl";
+  document.getElementById("bzPnlFr").className = pnlClass(frCost);
+  document.getElementById("bzPnlNet").textContent = fmtSign$(netPnlBbl) + "/bbl";
+  document.getElementById("bzPnlNet").className = pnlClass(netPnlBbl);
+
+  // Friday RD3 scenario
+  const RD3_TIME = new Date("2026-04-10T21:30:00Z");
+  const now = new Date();
+  const friHoursLeft = Math.max(0, (RD3_TIME - now) / 3600000);
+  const friSpread = spread * 0.6;
+  const friFrTotal = frPerHourDollar * friHoursLeft;
+  const friNet = friSpread + basisCost + friFrTotal;
+
+  document.getElementById("bzFriS0").textContent = fmtSign$(friSpread) + "/bbl";
+  document.getElementById("bzFriS0").className = pnlClass(friSpread);
+  document.getElementById("bzFriBasis").textContent = fmtSign$(basisCost) + "/bbl";
+  document.getElementById("bzFriBasis").className = pnlClass(basisCost);
+  document.getElementById("bzFriFr").textContent = fmtSign$(friFrTotal) + "/bbl (" + friHoursLeft.toFixed(0) + "h)";
+  document.getElementById("bzFriFr").className = pnlClass(friFrTotal);
+  document.getElementById("bzFriNet").textContent = fmtSign$(friNet) + "/bbl";
+  document.getElementById("bzFriNet").className = pnlClass(friNet);
+
+  // Profit estimates
+  const totalCap = 366500;
+  const totalCap2x = totalCap * 2;
+
+  const pnl100 = netPnlBbl * 10000;
+  const roi = totalCap2x > 0 ? (pnl100 / totalCap2x * 100) : 0;
+  const holdingDays = frRemaining.hours / 24;
+  const annualized = holdingDays > 0 ? (roi / holdingDays * 365) : 0;
+
+  document.getElementById("bzPnl100").textContent = fmtSign$(pnl100, 0);
+  document.getElementById("bzPnl100").className = pnlClass(pnl100);
+  document.getElementById("bzPnlRoi").textContent = fmtPct(roi);
+  document.getElementById("bzPnlRoi").className = pnlClass(roi);
+  document.getElementById("bzPnlAnnual").textContent = fmtPct(annualized);
+  document.getElementById("bzPnlAnnual").className = pnlClass(annualized);
+
+  const friPnl100 = friNet * 10000;
+  const friRoi = totalCap2x > 0 ? (friPnl100 / totalCap2x * 100) : 0;
+  const friDays = friHoursLeft / 24;
+  const friAnnual = friDays > 0 ? (friRoi / friDays * 365) : 0;
+
+  document.getElementById("bzFri100").textContent = fmtSign$(friPnl100, 0);
+  document.getElementById("bzFri100").className = pnlClass(friPnl100);
+  document.getElementById("bzFriRoi").textContent = fmtPct(friRoi);
+  document.getElementById("bzFriRoi").className = pnlClass(friRoi);
+  document.getElementById("bzFriAnnual").textContent = fmtPct(friAnnual) + " (" + friDays.toFixed(1) + "天)";
+  document.getElementById("bzFriAnnual").className = pnlClass(friAnnual);
+
+  prevBzIndex = index;
 }
 
 async function fetchCLM26() {
@@ -1562,14 +1803,16 @@ function render(market, hlPos) {
 // Main loop
 // ============================================================
 async function refresh() {
-  const fetches = [fetchMarket(), fetchBinanceCL()];
+  const fetches = [fetchMarket(), fetchBinanceCL(), fetchBinanceBZ()];
   if (!clmLocked) fetches.push(fetchCLM26());
-  const [market, bnData, clmPrice] = await Promise.all(fetches);
+  const [market, bnData, bzData, clmPrice] = await Promise.all(fetches);
   lastMarket = market;
 
-  // Render Binance panel
+  // Render Binance panels
   lastBnData = bnData;
+  lastBzData = bzData;
   renderBinance(bnData);
+  renderBrent(bzData);
 
   // Update CLM26 price if fetched successfully (only when not locked)
   if (!clmLocked && clmPrice) {
