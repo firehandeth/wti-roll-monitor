@@ -643,12 +643,12 @@
       <div class="card-sub" id="bzIndexSub">via Binance API</div>
     </div>
     <div class="card">
-      <div class="card-label">CLM26 (CME June)</div>
-      <div class="card-value" id="bzClm">--</div>
-      <div class="card-sub">同 Yahoo / 手动值</div>
+      <div class="card-label">BRN (Brent Futures)</div>
+      <div class="card-value" style="display:flex;align-items:center;gap:4px;">$<input type="number" class="clm-input" id="brnInput" step="0.01" onchange="onBrnChange()" onkeyup="onBrnChange()"><button id="brnLockBtn" onclick="toggleBrnLock()" style="background:none;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">AUTO</button></div>
+      <div class="card-sub" id="brnSource">等待 Yahoo 数据...</div>
     </div>
     <div class="card">
-      <div class="card-label">Spread (Index − CLM)</div>
+      <div class="card-label">Spread (Index − BRN)</div>
       <div class="card-value" id="bzSpread">--</div>
       <div class="card-sub" id="bzSpreadPct">--</div>
     </div>
@@ -855,6 +855,7 @@ const DEFAULT_CONFIG = {
   ibkrContracts: 0, ibkrEntry: 0, ibkrBal: 0, ibkrStop: 0,
   reserve: 0,
   clmPrice: 98.31,
+  brnPrice: 0,
 };
 
 let CFG = { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem("wtiCfg") || "{}") };
@@ -881,6 +882,7 @@ const ALERTS_CFG = [
 
 let prevOracle = null;
 let clmLocked = false; // true = manual mode, skip Yahoo auto-refresh
+let brnLocked = false;
 let lastMarket = null;
 let lastBnData = null;
 let lastBzData = null;
@@ -962,6 +964,34 @@ function onClmChange() {
       if (lastBnData) renderBinance(lastBnData);
       if (lastBzData) renderBrent(lastBzData);
     }
+  }
+}
+
+// BRN lock/change
+function updateBrnLockUI() {
+  const btn = document.getElementById("brnLockBtn");
+  const src = document.getElementById("brnSource");
+  if (brnLocked) {
+    btn.textContent = "MANUAL"; btn.style.borderColor = "var(--yellow)"; btn.style.color = "var(--yellow)";
+    src.textContent = "手动模式 — Yahoo 自动刷新已暂停"; src.style.color = "var(--yellow)";
+  } else {
+    btn.textContent = "AUTO"; btn.style.borderColor = "var(--border)"; btn.style.color = "var(--dim)";
+  }
+}
+
+function toggleBrnLock() {
+  brnLocked = !brnLocked;
+  updateBrnLockUI();
+  if (!brnLocked) refresh();
+}
+
+function onBrnChange() {
+  const val = parseFloat(document.getElementById("brnInput").value);
+  if (!isNaN(val) && val > 0) {
+    if (!brnLocked) { brnLocked = true; updateBrnLockUI(); }
+    CFG.brnPrice = val;
+    localStorage.setItem("wtiCfg", JSON.stringify(CFG));
+    if (lastBzData) renderBrent(lastBzData);
   }
 }
 
@@ -1212,7 +1242,7 @@ function renderBrent(bz) {
 
   const index = bz.index;
   const mark = bz.mark;
-  const clm = CFG.clmPrice;
+  const brn = CFG.brnPrice;
 
   // Prices & Spread
   document.getElementById("bzIndex").textContent = fmt$(index, 2);
@@ -1220,10 +1250,9 @@ function renderBrent(bz) {
   document.getElementById("bzIndexSub").innerHTML = prevBzIndex
     ? `<span class="${idxChange >= 0 ? 'positive' : 'negative'}">${idxChange >= 0 ? '▲' : '▼'} $${Math.abs(idxChange).toFixed(2)}</span>`
     : "via Binance API";
-  document.getElementById("bzClm").textContent = fmt$(clm, 2);
 
-  const spread = index - clm;
-  const spreadPct = clm > 0 ? (spread / clm * 100) : 0;
+  const spread = brn > 0 ? index - brn : 0;
+  const spreadPct = brn > 0 ? (spread / brn * 100) : 0;
   const spreadEl = document.getElementById("bzSpread");
   spreadEl.textContent = fmtSign$(spread);
   spreadEl.className = "card-value " + pnlClass(spread);
@@ -1346,6 +1375,26 @@ async function fetchCLM26() {
     }
   }
   return null; // fallback to manual
+}
+
+async function fetchBRN() {
+  const proxies = [
+    (u) => "https://corsproxy.io/?" + encodeURIComponent(u),
+    (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  ];
+  const url = "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=1d&range=1d";
+  for (const proxy of proxies) {
+    try {
+      const resp = await fetch(proxy(url), { signal: AbortSignal.timeout(5000) });
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (price && price > 0) return price;
+    } catch (e) {
+      console.warn("BRN proxy failed:", e);
+    }
+  }
+  return null;
 }
 
 async function fetchHlPosition(wallet) {
@@ -1805,7 +1854,10 @@ function render(market, hlPos) {
 async function refresh() {
   const fetches = [fetchMarket(), fetchBinanceCL(), fetchBinanceBZ()];
   if (!clmLocked) fetches.push(fetchCLM26());
-  const [market, bnData, bzData, clmPrice] = await Promise.all(fetches);
+  else fetches.push(Promise.resolve(null));
+  if (!brnLocked) fetches.push(fetchBRN());
+  else fetches.push(Promise.resolve(null));
+  const [market, bnData, bzData, clmPrice, brnPrice] = await Promise.all(fetches);
   lastMarket = market;
 
   // Render Binance panels
@@ -1825,6 +1877,17 @@ async function refresh() {
     document.getElementById("clmSource").style.color = "var(--red)";
   }
 
+  // Update BRN price if fetched successfully (only when not locked)
+  if (!brnLocked && brnPrice) {
+    CFG.brnPrice = brnPrice;
+    document.getElementById("brnInput").value = brnPrice.toFixed(2);
+    document.getElementById("brnSource").textContent = "via Yahoo Finance (BZ=F) — 自动刷新";
+    document.getElementById("brnSource").style.color = "var(--green)";
+  } else if (!brnLocked && !brnPrice && !CFG.brnPrice) {
+    document.getElementById("brnSource").textContent = "获取失败 — 请手动输入";
+    document.getElementById("brnSource").style.color = "var(--red)";
+  }
+
   let hlPos = null;
   if (CFG.wallet) {
     hlPos = await fetchHlPosition(CFG.wallet);
@@ -1834,8 +1897,9 @@ async function refresh() {
   render(market, hlPos);
 }
 
-// Init CLM input from config
+// Init CLM/BRN inputs from config
 document.getElementById("clmInput").value = CFG.clmPrice;
+if (CFG.brnPrice) document.getElementById("brnInput").value = CFG.brnPrice;
 
 // Request notification permission
 if ("Notification" in window && Notification.permission === "default") {
